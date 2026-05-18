@@ -3,10 +3,18 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import AppLayout from "./components/AppLayout";
+import Dashboard from "./pages/Dashboard";
+import InvoiceEditor from "./pages/InvoiceEditor";
+import Settings from "./pages/Settings";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Force dark theme by default
+if (typeof document !== "undefined") {
+  document.documentElement.classList.add("dark");
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -15,8 +23,12 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/invoice/new" element={<InvoiceEditor />} />
+            <Route path="/invoice/:id" element={<InvoiceEditor />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
