@@ -57,7 +57,7 @@ module.exports = async (req, res) => {
           JSON.stringify(inv.company || {}),
           inv.createdAt || new Date().toISOString(),
           inv.updatedAt || new Date().toISOString(),
-        ]
+        ],
       );
 
       return res.status(200).json({ ok: true });

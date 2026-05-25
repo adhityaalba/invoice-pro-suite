@@ -76,7 +76,8 @@ export default function InvoiceEditor() {
 
       // Fire-and-forget: try to sync to serverless API (Neon). Don't block UI or printing.
       try {
-        if (typeof fetch === 'function') {
+        // Only attempt remote sync in production (deployed) to avoid errors during local dev
+        if (typeof fetch === 'function' && import.meta.env.PROD) {
           fetch('/api/invoices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
