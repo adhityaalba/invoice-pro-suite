@@ -1,8 +1,35 @@
 import * as neonPkg from '@neondatabase/serverless';
 
-// Support packages that export createClient as named export or default export.
-const createClient = neonPkg.createClient ?? neonPkg.default ?? neonPkg;
-const client = createClient({ connectionString: process.env.DATABASE_URL });
+let client = null;
+
+async function ensureClient() {
+  if (client) return client;
+  const conn = process.env.DATABASE_URL;
+  // Try Neon serverless package if it provides createClient
+  try {
+    const createClient = neonPkg?.createClient ?? neonPkg?.default ?? null;
+    if (typeof createClient === 'function') {
+      client = createClient({ connectionString: conn });
+      return client;
+    }
+  } catch (e) {
+    console.warn('neon createClient attempt failed', e);
+  }
+
+  // Fallback: use node-postgres (pg)
+  try {
+    const { Client } = await import('pg');
+    const pg = new Client({ connectionString: conn });
+    await pg.connect();
+    client = {
+      query: (text, params) => pg.query(text, params),
+    };
+    return client;
+  } catch (e) {
+    console.error('Failed to initialise pg client', e);
+    throw e;
+  }
+}
 
 /**
  * Simple serverless API for invoices.
