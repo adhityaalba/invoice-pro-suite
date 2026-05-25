@@ -73,6 +73,28 @@ export default function InvoiceEditor() {
       saveCompany(inv.company);
       if (!silent) toast.success('Invoice disimpan');
       if (id === 'new') nav(`/invoice/${inv.id}`, { replace: true });
+
+      // Fire-and-forget: try to sync to serverless API (Neon). Don't block UI or printing.
+      try {
+        if (typeof fetch === 'function') {
+          fetch('/api/invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(inv),
+          })
+            .then((r) => {
+              if (!r.ok) throw new Error('remote save failed');
+              if (!silent) toast.success('Sinkron ke server berhasil');
+            })
+            .catch((err) => {
+              console.warn('Remote save failed', err);
+              if (!silent) toast.error('Gagal menyimpan ke server');
+            });
+        }
+      } catch (e) {
+        console.warn('Failed to start remote sync', e);
+      }
+
       return true;
     } catch (err: any) {
       console.error('Failed to save to localStorage:', err);
@@ -280,9 +302,6 @@ function EditorForm(props: any) {
             </Field>
             <Field label="Alamat" className="md:col-span-2">
               <Textarea rows={2} value={inv.customer.address} onChange={(e) => updCustomer('address', e.target.value)} />
-            </Field>
-            <Field label="Catatan Customer" className="md:col-span-2">
-              <Textarea rows={2} value={inv.customer.notes} onChange={(e) => updCustomer('notes', e.target.value)} />
             </Field>
           </CardContent>
         </Card>
