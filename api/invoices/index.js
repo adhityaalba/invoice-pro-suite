@@ -5,18 +5,55 @@ let client = null;
 async function ensureClient() {
   if (client) return client;
   const conn = process.env.DATABASE_URL;
+  // prefer explicit PGSSLMODE to avoid ambiguous alias behavior
+  try {
+    process.env.PGSSLMODE = 'verify-full';
+  } catch (e) {
+    // ignore
+  }
   function ensureSslMode(connStr) {
     if (!connStr) return connStr;
-    const lower = connStr.toLowerCase();
-    if (lower.includes('sslmode=') || lower.includes('uselibpqcompat=')) return connStr;
-    // append sslmode=verify-full preserving existing query params
-    return connStr.includes('?') ? `${connStr}&sslmode=verify-full` : `${connStr}?sslmode=verify-full`;
+    // normalize existing sslmode aliases to 'verify-full'
+    try {
+      const url = new URL(connStr);
+      const params = url.searchParams;
+      const ssl = params.get('sslmode');
+      if (ssl) {
+        const s = ssl.toLowerCase();
+        if (s === 'prefer' || s === 'require' || s === 'verify-ca') {
+          params.set('sslmode', 'verify-full');
+          url.search = params.toString();
+          return url.toString();
+        }
+        // if sslmode exists and is not an alias, leave as-is
+        return connStr;
+      }
+      if (params.has('uselibpqcompat')) {
+        // respect explicit libpq compatibility flag
+        return connStr;
+      }
+      // append sslmode=verify-full preserving existing query params
+      return connStr.includes('?') ? `${connStr}&sslmode=verify-full` : `${connStr}?sslmode=verify-full`;
+    } catch (e) {
+      // fallback to string operations if URL parsing fails
+      const lower = connStr.toLowerCase();
+      if (lower.includes('sslmode=')) {
+        return connStr.replace(/sslmode=([^&]*)/i, 'sslmode=verify-full');
+      }
+      return connStr.includes('?') ? `${connStr}&sslmode=verify-full` : `${connStr}?sslmode=verify-full`;
+    }
   }
   // Try Neon serverless package if it provides createClient
   try {
     const createClient = neonPkg?.createClient ?? neonPkg?.default ?? null;
     if (typeof createClient === 'function') {
-      client = createClient({ connectionString: conn });
+      const connWithSsl = ensureSslMode(conn);
+      // Some neon exports expect an options object, others accept the connection string
+      try {
+        client = createClient({ connectionString: connWithSsl });
+      } catch (e) {
+        client = createClient(connWithSsl);
+      }
       return client;
     }
   } catch (e) {
@@ -27,7 +64,17 @@ async function ensureClient() {
   try {
     const { Client } = await import('pg');
     const connWithSsl = ensureSslMode(conn);
-    const pg = new Client({ connectionString: connWithSsl, ssl: { rejectUnauthorized: true } });
+    // build config object to avoid pg-connection-string parsing warning
+    const url = new URL(connWithSsl);
+    const config = {
+      host: url.hostname,
+      port: url.port ? Number(url.port) : 5432,
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname ? url.pathname.slice(1) : undefined,
+      ssl: { rejectUnauthorized: true },
+    };
+    const pg = new Client(config);
     await pg.connect();
     client = {
       query: (text, params) => pg.query(text, params),
