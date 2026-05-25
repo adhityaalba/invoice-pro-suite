@@ -39,7 +39,8 @@ async function ensureClient() {
 export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
-      const { rows } = await client.query('SELECT * FROM invoices ORDER BY created_at DESC');
+      const db = await ensureClient();
+      const { rows } = await db.query('SELECT * FROM invoices ORDER BY created_at DESC');
       return res.status(200).json(rows);
     }
 
@@ -48,7 +49,8 @@ export default async function handler(req, res) {
       // minimal validation
       if (!inv || !inv.id) return res.status(400).json({ error: 'missing id' });
 
-      await client.query(
+      const db = await ensureClient();
+      await db.query(
         `INSERT INTO invoices (id, number, date, due_date, status, document_type, customer, device, items, payment, signatures, notes, terms, template_settings, company, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          ON CONFLICT (id) DO UPDATE SET
