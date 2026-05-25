@@ -1,19 +1,19 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import AppLayout from "./components/AppLayout";
-import Dashboard from "./pages/Dashboard";
-import InvoiceEditor from "./pages/InvoiceEditor";
-import Settings from "./pages/Settings";
-import NotFound from "./pages/NotFound";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { Toaster as Sonner } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/toaster';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import AppLayout from './components/AppLayout';
+import Dashboard from './pages/Dashboard';
+import InvoiceEditor from './pages/InvoiceEditor';
+import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 const queryClient = new QueryClient();
 
 // Force dark theme by default
-if (typeof document !== "undefined") {
-  document.documentElement.classList.add("dark");
+if (typeof document !== 'undefined') {
+  document.documentElement.classList.add('dark');
 }
 
 const App = () => (

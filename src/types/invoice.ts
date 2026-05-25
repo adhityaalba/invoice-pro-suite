@@ -1,5 +1,5 @@
-export type InvoiceStatus = "draft" | "paid" | "unpaid" | "partial";
-export type DocumentType = "invoice" | "service_order";
+export type InvoiceStatus = 'draft' | 'paid' | 'unpaid' | 'partial';
+export type DocumentType = 'invoice' | 'service_order';
 
 export interface CompanyProfile {
   name: string;
@@ -60,7 +60,7 @@ export interface Signatures {
 }
 
 export interface TemplateSettings {
-  theme: "dark" | "light";
+  theme: 'dark' | 'light';
   brandColor: string;
   showQr: boolean;
   showPin: boolean;
@@ -100,13 +100,13 @@ export const DEFAULT_TERMS_GENERAL = `1. Pengambilan unit wajib membawa nota/inv
 5. Dengan menandatangani dokumen ini, customer menyetujui seluruh syarat & ketentuan.`;
 
 export const DEFAULT_COMPANY: CompanyProfile = {
-  name: "Circle Pair",
-  tagline: "Gadget Service & Repair",
-  email: "hello@circlepair.id",
-  phone: "+62 812-3456-7890",
-  address: "Jl. Merdeka No. 12, Jakarta Pusat",
-  brandColor: "#F5A623",
-  paymentMethods: "BCA 1234567890 a.n. Circle Pair\nDANA / OVO / GoPay: 081234567890",
+  name: 'Circle Pair',
+  tagline: 'Gadget Service & Repair',
+  email: 'circlepair.id@gmail.com',
+  phone: '+62 877-3916-9797',
+  address: 'Jl. Kyai Saleh No.1108, Mugassari, Kec. Semarang Sel., Kota Semarang, Jawa Tengah 50244',
+  brandColor: '#F5A623',
+  paymentMethods: 'BCA 1234567890 a.n. Circle Pair\nDANA / OVO / GoPay: 081234567890',
   defaultTermsWarranty: DEFAULT_TERMS_WARRANTY,
   defaultTermsGeneral: DEFAULT_TERMS_GENERAL,
 };
