@@ -1,4 +1,4 @@
-const { createClient } = require('@neondatabase/serverless');
+import { createClient } from '@neondatabase/serverless';
 
 const client = createClient({ connectionString: process.env.DATABASE_URL });
 
@@ -7,7 +7,7 @@ const client = createClient({ connectionString: process.env.DATABASE_URL });
  * GET  /api/invoices       - list invoices
  * POST /api/invoices      - upsert invoice (body = invoice JSON)
  */
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const { rows } = await client.query('SELECT * FROM invoices ORDER BY created_at DESC');
@@ -67,6 +67,11 @@ module.exports = async (req, res) => {
     res.status(405).end('Method Not Allowed');
   } catch (err) {
     console.error('API /api/invoices error', err);
-    res.status(500).json({ error: 'server_error' });
+    // expose error message in non-production logs for easier debugging
+    if (process.env.NODE_ENV === 'production') {
+      res.status(500).json({ error: 'server_error' });
+    } else {
+      res.status(500).json({ error: String(err?.message || err) });
+    }
   }
-};
+}
