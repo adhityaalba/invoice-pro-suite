@@ -1,5 +1,7 @@
-import { createClient } from '@neondatabase/serverless';
+import * as neonPkg from '@neondatabase/serverless';
 
+// Support packages that export createClient as named export or default export.
+const createClient = neonPkg.createClient ?? neonPkg.default ?? neonPkg;
 const client = createClient({ connectionString: process.env.DATABASE_URL });
 
 /**
