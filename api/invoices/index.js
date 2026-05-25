@@ -5,6 +5,13 @@ let client = null;
 async function ensureClient() {
   if (client) return client;
   const conn = process.env.DATABASE_URL;
+  function ensureSslMode(connStr) {
+    if (!connStr) return connStr;
+    const lower = connStr.toLowerCase();
+    if (lower.includes('sslmode=') || lower.includes('uselibpqcompat=')) return connStr;
+    // append sslmode=verify-full preserving existing query params
+    return connStr.includes('?') ? `${connStr}&sslmode=verify-full` : `${connStr}?sslmode=verify-full`;
+  }
   // Try Neon serverless package if it provides createClient
   try {
     const createClient = neonPkg?.createClient ?? neonPkg?.default ?? null;
@@ -19,7 +26,8 @@ async function ensureClient() {
   // Fallback: use node-postgres (pg)
   try {
     const { Client } = await import('pg');
-    const pg = new Client({ connectionString: conn });
+    const connWithSsl = ensureSslMode(conn);
+    const pg = new Client({ connectionString: connWithSsl, ssl: { rejectUnauthorized: true } });
     await pg.connect();
     client = {
       query: (text, params) => pg.query(text, params),
