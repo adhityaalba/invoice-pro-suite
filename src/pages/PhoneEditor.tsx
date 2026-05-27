@@ -8,35 +8,40 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Save, Printer, ArrowLeft, Package, Eye, Smartphone, Cable } from 'lucide-react';
-import { blankPhoneInvoice, upsertPhoneInvoice, findOrCreateUser, updateUserStats, addServiceHistory, getPhoneInvoice } from '@/lib/storage-phone';
+import { Trash2, Save, Printer, ArrowLeft, Package, Smartphone, Cable } from 'lucide-react';
+import { blankPhoneInvoice } from '@/lib/storage-phone';
+import { upsertPhoneInvoice, findOrCreateUser, getPhoneInvoice, getUserByPhone } from '@/lib/storage-api';
 import { CONDITION_LABELS, BLANK_SALES_ITEM, BLANK_TRADE_IN, type CirclePhoneInvoice, type SalesItem } from '@/types/circle-phone';
-import type { UserProfile } from '@/types/user';
 import { newId, formatRupiah } from '@/lib/format';
 import { toast } from 'sonner';
 
 export default function PhoneEditor() {
   const { id } = useParams();
   const nav = useNavigate();
-  const [inv, setInv] = useState<CirclePhoneInvoice>(() => {
-    if (id && id !== 'new') {
-      const existing = getPhoneInvoice(id);
-      if (existing) return existing;
-    }
-    return blankPhoneInvoice();
-  });
-
+  const [inv, setInv] = useState<CirclePhoneInvoice>(() => normalizePhoneInvoice(blankPhoneInvoice()));
   const [showTradeIn, setShowTradeIn] = useState(false);
 
-  // Re-load on id change
   useEffect(() => {
+    let mounted = true;
+
     if (id && id !== 'new') {
-      const e = getPhoneInvoice(id);
-      if (e) {
-        setInv(e);
-        setShowTradeIn(!!e.tradeIn);
-      }
+      (async () => {
+        try {
+          const existing = await getPhoneInvoice(id);
+          if (mounted && existing) {
+            const normalized = normalizePhoneInvoice(existing);
+            setInv(normalized);
+            setShowTradeIn(!!normalized.tradeIn);
+          }
+        } catch (error) {
+          console.warn('Failed to load phone invoice', error);
+        }
+      })();
     }
+
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   const totals = useMemo(() => {
@@ -46,19 +51,37 @@ export default function PhoneEditor() {
     return { subtotal, total, remaining };
   }, [inv.items, inv.payment.downPayment, inv.payment.tradeInValue]);
 
-  const update = (patch: Partial<CirclePhoneInvoice>) => setInv((p) => ({ ...p, ...patch, updatedAt: new Date().toISOString() }));
-  const updItem = (idx: number, patch: Partial<SalesItem>) => setInv((p) => ({ ...p, items: p.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) }));
-  const delItem = (idx: number) => setInv((p) => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
+  const update = (patch: Partial<CirclePhoneInvoice>) => {
+    setInv((prev) => normalizePhoneInvoice({ ...prev, ...patch, updatedAt: new Date().toISOString() }));
+  };
+
+  const updItem = (idx: number, patch: Partial<SalesItem>) => {
+    setInv((prev) =>
+      normalizePhoneInvoice({
+        ...prev,
+        items: prev.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
+      }),
+    );
+  };
+
+  const delItem = (idx: number) => {
+    setInv((prev) => normalizePhoneInvoice({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
+  };
 
   const addItem = (type: 'device' | 'accessory') => {
-    setInv((p) => ({
-      ...p,
-      items: [...p.items, {
-        ...BLANK_SALES_ITEM,
-        id: newId(),
-        itemType: type,
-      }]
-    }));
+    setInv((prev) =>
+      normalizePhoneInvoice({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            ...BLANK_SALES_ITEM,
+            id: newId(),
+            itemType: type,
+          },
+        ],
+      }),
+    );
   };
 
   const validate = () => {
@@ -66,66 +89,44 @@ export default function PhoneEditor() {
     if (!inv.customerName.trim()) errs.push('Nama customer wajib diisi');
     if (!inv.number.trim()) errs.push('Nomor invoice wajib diisi');
     if (inv.items.length === 0 || inv.items.every((i) => !i.name.trim())) errs.push('Minimal satu item');
-    const hasDevice = inv.items.some(i => i.itemType === 'device');
+    const hasDevice = inv.items.some((i) => i.itemType === 'device');
     if (!hasDevice) errs.push('Minimal satu device');
+
     if (errs.length > 0) {
       toast.error(errs.join(', '));
       return false;
     }
+
     return true;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
 
-    // Find or create user with additional info
-    const userProfile = findOrCreateUser(inv.customerName, inv.customerPhone);
+    try {
+      const userProfile = await findOrCreateUser(inv.customerName, inv.customerPhone);
+      const firstDevice = inv.items.find((i) => i.itemType === 'device');
+      const deviceName = firstDevice?.name || 'Device';
 
-    // Update user profile with additional info if provided
-    if (inv.customerEmail || inv.customerInstagram || inv.customerAddress) {
-      const users = JSON.parse(localStorage.getItem('cp_users_v1') || '[]');
-      const idx = users.findIndex((u: any) => u.id === userProfile.id);
-      if (idx >= 0) {
-        if (inv.customerEmail) users[idx].email = inv.customerEmail;
-        if (inv.customerInstagram) users[idx].instagram = inv.customerInstagram;
-        if (inv.customerAddress) users[idx].address = inv.customerAddress;
-        users[idx].updatedAt = new Date().toISOString();
-        localStorage.setItem('cp_users_v1', JSON.stringify(users));
-      }
+      const invoiceToSave = normalizePhoneInvoice({
+        ...inv,
+        customerId: userProfile.id,
+        deviceModel: deviceName,
+        payment: {
+          ...inv.payment,
+          remaining: totals.remaining,
+        },
+      });
+
+      const savedList = await upsertPhoneInvoice(invoiceToSave);
+      const saved = savedList.find((row) => row.id === invoiceToSave.id) || savedList[0] || invoiceToSave;
+
+      setInv(normalizePhoneInvoice(saved));
+      toast.success('Invoice Circle Phone disimpan');
+    } catch (error) {
+      console.error('Failed to save phone invoice', error);
+      toast.error('Gagal menyimpan invoice ke database');
     }
-
-    // Get first device name for description
-    const firstDevice = inv.items.find(i => i.itemType === 'device');
-    const deviceName = firstDevice?.name || 'Device';
-
-    // Update invoice with customer ID and device model
-    const invoiceToSave = {
-      ...inv,
-      customerId: userProfile.id,
-      deviceModel: deviceName,
-      payment: {
-        ...inv.payment,
-        remaining: totals.remaining,
-      },
-    };
-
-    const saved = upsertPhoneInvoice(invoiceToSave);
-
-    // Update user stats and add history
-    updateUserStats(userProfile.id, 'sales');
-    addServiceHistory(
-      userProfile.id,
-      invoiceToSave.id,
-      invoiceToSave.number,
-      'sales',
-      invoiceToSave.date,
-      deviceName,
-      totals.total,
-      invoiceToSave.status
-    );
-
-    toast.success('Invoice Circle Phone disimpan');
-    setInv(saved);
   };
 
   const handlePrint = () => {
@@ -135,7 +136,7 @@ export default function PhoneEditor() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => nav('/dashboard')}>
+        <Button variant="ghost" size="sm" onClick={() => nav('/')}>
           <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
         </Button>
         <h1 className="text-xl font-bold">Circle Phone - Sales Invoice</h1>
@@ -148,7 +149,6 @@ export default function PhoneEditor() {
           <TabsTrigger value="payment">Payment & Trade-In</TabsTrigger>
         </TabsList>
 
-        {/* Details Tab */}
         <TabsContent value="details" className="space-y-4">
           <Card>
             <CardContent className="p-4 space-y-4">
@@ -199,34 +199,19 @@ export default function PhoneEditor() {
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input
-                      value={inv.customerEmail || ''}
-                      onChange={(e) => update({ customerEmail: e.target.value } as any)}
-                      placeholder="email@example.com"
-                    />
+                    <Input value={inv.customerEmail || ''} onChange={(e) => update({ customerEmail: e.target.value } as any)} placeholder="email@example.com" />
                   </div>
                   <div className="space-y-2">
                     <Label>Instagram</Label>
-                    <Input
-                      value={inv.customerInstagram || ''}
-                      onChange={(e) => update({ customerInstagram: e.target.value } as any)}
-                      placeholder="@username"
-                    />
+                    <Input value={inv.customerInstagram || ''} onChange={(e) => update({ customerInstagram: e.target.value } as any)} placeholder="@username" />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Alamat</Label>
-                    <Input
-                      value={inv.customerAddress || ''}
-                      onChange={(e) => update({ customerAddress: e.target.value } as any)}
-                      placeholder="Alamat lengkap"
-                    />
+                    <Input value={inv.customerAddress || ''} onChange={(e) => update({ customerAddress: e.target.value } as any)} placeholder="Alamat lengkap" />
                   </div>
                 </div>
 
-                {/* Show customer history if exists */}
-                {inv.customerPhone && (
-                  <CustomerHistoryDisplay phone={inv.customerPhone} />
-                )}
+                {inv.customerPhone && <CustomerHistoryDisplay phone={inv.customerPhone} />}
               </div>
 
               <div className="space-y-2">
@@ -237,7 +222,6 @@ export default function PhoneEditor() {
           </Card>
         </TabsContent>
 
-        {/* Items Tab */}
         <TabsContent value="items" className="space-y-4">
           <Card>
             <CardContent className="p-4 space-y-4">
@@ -259,18 +243,11 @@ export default function PhoneEditor() {
                     <CardContent className="p-4 space-y-4">
                       <div className="flex justify-between items-start gap-2">
                         <div className="flex items-center gap-2">
-                          {item.itemType === 'device' ? (
-                            <Smartphone className="h-4 w-4 text-blue-500" />
-                          ) : (
-                            <Cable className="h-4 w-4 text-gray-500" />
-                          )}
+                          {item.itemType === 'device' ? <Smartphone className="h-4 w-4 text-blue-500" /> : <Cable className="h-4 w-4 text-gray-500" />}
                           <span className="font-medium capitalize">{item.itemType === 'device' ? 'Device' : 'Aksesoris'}</span>
                         </div>
                         <div className="flex gap-1">
-                          <Select
-                            value={item.itemType}
-                            onValueChange={(v: 'device' | 'accessory') => updItem(idx, { itemType: v })}
-                          >
+                          <Select value={item.itemType} onValueChange={(v: 'device' | 'accessory') => updItem(idx, { itemType: v })}>
                             <SelectTrigger className="w-32">
                               <SelectValue />
                             </SelectTrigger>
@@ -286,29 +263,15 @@ export default function PhoneEditor() {
                       </div>
 
                       <div className="space-y-3">
-                        <Input
-                          value={item.name}
-                          onChange={(e) => updItem(idx, { name: e.target.value })}
-                          placeholder={item.itemType === 'device' ? "Model device (ex: iPhone 15 Pro)" : "Nama aksesoris (ex: Case Spigen)"}
-                        />
-                        <Textarea
-                          value={item.description || ''}
-                          onChange={(e) => updItem(idx, { description: e.target.value })}
-                          placeholder="Deskripsi item..."
-                          rows={2}
-                        />
+                        <Input value={item.name} onChange={(e) => updItem(idx, { name: e.target.value })} placeholder={item.itemType === 'device' ? 'Model device (ex: iPhone 15 Pro)' : 'Nama aksesoris (ex: Case Spigen)'} />
+                        <Textarea value={item.description || ''} onChange={(e) => updItem(idx, { description: e.target.value })} placeholder="Deskripsi item..." rows={2} />
                       </div>
 
-                      {/* Device-specific fields */}
                       {item.itemType === 'device' && (
                         <div className="grid md:grid-cols-2 gap-3 p-3 bg-blue-500/5 rounded-lg">
                           <div className="space-y-1">
                             <Label className="text-xs">IMEI / SN</Label>
-                            <Input
-                              value={item.imei || ''}
-                              onChange={(e) => updItem(idx, { imei: e.target.value })}
-                              placeholder="35xxxxxxxxxxxxx"
-                            />
+                            <Input value={item.imei || ''} onChange={(e) => updItem(idx, { imei: e.target.value })} placeholder="35xxxxxxxxxxxxx" />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs">Kapasitas</Label>
@@ -327,11 +290,7 @@ export default function PhoneEditor() {
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs">Warna</Label>
-                            <Input
-                              value={item.color || ''}
-                              onChange={(e) => updItem(idx, { color: e.target.value })}
-                              placeholder="Natural Titanium"
-                            />
+                            <Input value={item.color || ''} onChange={(e) => updItem(idx, { color: e.target.value })} placeholder="Natural Titanium" />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs">Kondisi</Label>
@@ -354,36 +313,19 @@ export default function PhoneEditor() {
                       <div className="grid grid-cols-4 gap-2">
                         <div className="space-y-1">
                           <Label className="text-xs">Qty</Label>
-                          <Input
-                            type="number"
-                            value={item.qty}
-                            onChange={(e) => updItem(idx, { qty: parseInt(e.target.value) || 0 })}
-                            min={1}
-                          />
+                          <Input type="number" value={item.qty} onChange={(e) => updItem(idx, { qty: parseInt(e.target.value) || 0 })} min={1} />
                         </div>
                         <div className="space-y-1 col-span-2">
                           <Label className="text-xs">Harga</Label>
-                          <Input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => updItem(idx, { unitPrice: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                          />
+                          <Input type="number" value={item.unitPrice} onChange={(e) => updItem(idx, { unitPrice: parseInt(e.target.value) || 0 })} placeholder="0" />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Disc</Label>
-                          <Input
-                            type="number"
-                            value={item.discount}
-                            onChange={(e) => updItem(idx, { discount: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                          />
+                          <Input type="number" value={item.discount} onChange={(e) => updItem(idx, { discount: parseInt(e.target.value) || 0 })} placeholder="0" />
                         </div>
                       </div>
 
-                      <div className="text-right text-sm font-medium">
-                        Subtotal: {formatRupiah(item.qty * item.unitPrice - item.discount)}
-                      </div>
+                      <div className="text-right text-sm font-medium">Subtotal: {formatRupiah(item.qty * item.unitPrice - item.discount)}</div>
                     </CardContent>
                   </Card>
                 ))}
@@ -403,9 +345,7 @@ export default function PhoneEditor() {
           </Card>
         </TabsContent>
 
-        {/* Payment & Trade-In Tab */}
         <TabsContent value="payment" className="space-y-4">
-          {/* Trade-In Section */}
           <Card>
             <CardContent className="p-4 space-y-4">
               <div className="flex justify-between items-center">
@@ -436,18 +376,11 @@ export default function PhoneEditor() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Model Trade-In</Label>
-                      <Input
-                        value={inv.tradeIn.model}
-                        onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, model: e.target.value } })}
-                        placeholder="iPhone 12 Pro"
-                      />
+                      <Input value={inv.tradeIn.model} onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, model: e.target.value } })} placeholder="iPhone 12 Pro" />
                     </div>
                     <div className="space-y-2">
                       <Label>Kapasitas</Label>
-                      <Select
-                        value={inv.tradeIn.storage}
-                        onValueChange={(v) => update({ tradeIn: { ...inv.tradeIn!, storage: v } })}
-                      >
+                      <Select value={inv.tradeIn.storage} onValueChange={(v) => update({ tradeIn: { ...inv.tradeIn!, storage: v } })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Pilih kapasitas" />
                         </SelectTrigger>
@@ -461,26 +394,15 @@ export default function PhoneEditor() {
                     </div>
                     <div className="space-y-2">
                       <Label>Warna</Label>
-                      <Input
-                        value={inv.tradeIn.color}
-                        onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, color: e.target.value } })}
-                        placeholder="Pacific Blue"
-                      />
+                      <Input value={inv.tradeIn.color} onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, color: e.target.value } })} placeholder="Pacific Blue" />
                     </div>
                     <div className="space-y-2">
                       <Label>IMEI / SN</Label>
-                      <Input
-                        value={inv.tradeIn.imei}
-                        onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, imei: e.target.value } })}
-                        placeholder="35xxxxxxxxxxxxx"
-                      />
+                      <Input value={inv.tradeIn.imei} onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, imei: e.target.value } })} placeholder="35xxxxxxxxxxxxx" />
                     </div>
                     <div className="space-y-2">
                       <Label>Kondisi</Label>
-                      <Select
-                        value={inv.tradeIn.condition}
-                        onValueChange={(v) => update({ tradeIn: { ...inv.tradeIn!, condition: v as any } })}
-                      >
+                      <Select value={inv.tradeIn.condition} onValueChange={(v) => update({ tradeIn: { ...inv.tradeIn!, condition: v as any } })}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -498,7 +420,7 @@ export default function PhoneEditor() {
                         value={inv.tradeIn.estimatedPrice}
                         onChange={(e) => update({
                           tradeIn: { ...inv.tradeIn!, estimatedPrice: parseInt(e.target.value) || 0 },
-                          payment: { ...inv.payment, tradeInValue: parseInt(e.target.value) || 0 }
+                          payment: { ...inv.payment, tradeInValue: parseInt(e.target.value) || 0 },
                         })}
                         placeholder="0"
                       />
@@ -506,17 +428,10 @@ export default function PhoneEditor() {
                   </div>
                   <div className="space-y-2">
                     <Label>Catatan Trade-In</Label>
-                    <Textarea
-                      value={inv.tradeIn.notes || ''}
-                      onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, notes: e.target.value } })}
-                      placeholder="Kelengkapan, minus, dll..."
-                      rows={2}
-                    />
+                    <Textarea value={inv.tradeIn.notes || ''} onChange={(e) => update({ tradeIn: { ...inv.tradeIn!, notes: e.target.value } })} placeholder="Kelengkapan, minus, dll..." rows={2} />
                   </div>
                   <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
-                    <div className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                      Nilai Trade-In: {formatRupiah(inv.tradeIn.estimatedPrice)}
-                    </div>
+                    <div className="text-sm font-medium text-purple-600 dark:text-purple-400">Nilai Trade-In: {formatRupiah(inv.tradeIn.estimatedPrice)}</div>
                   </div>
                 </div>
               )}
@@ -530,7 +445,6 @@ export default function PhoneEditor() {
             </CardContent>
           </Card>
 
-          {/* Payment Section */}
           <Card>
             <CardContent className="p-4 space-y-4">
               <h3 className="font-semibold flex items-center gap-2">
@@ -541,10 +455,7 @@ export default function PhoneEditor() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Metode Pembayaran</Label>
-                    <Select
-                      value={inv.payment.method}
-                      onValueChange={(v) => update({ payment: { ...inv.payment, method: v } })}
-                    >
+                    <Select value={inv.payment.method} onValueChange={(v) => update({ payment: { ...inv.payment, method: v } })}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -562,35 +473,19 @@ export default function PhoneEditor() {
                   </div>
                   <div className="space-y-2">
                     <Label>Down Payment / DP</Label>
-                    <Input
-                      type="number"
-                      value={inv.payment.downPayment}
-                      onChange={(e) => update({ payment: { ...inv.payment, downPayment: parseInt(e.target.value) || 0 } })}
-                      placeholder="0"
-                    />
+                    <Input type="number" value={inv.payment.downPayment} onChange={(e) => update({ payment: { ...inv.payment, downPayment: parseInt(e.target.value) || 0 } })} placeholder="0" />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Nilai Trade-In</Label>
-                  <Input
-                    type="number"
-                    value={inv.payment.tradeInValue}
-                    onChange={(e) => update({ payment: { ...inv.payment, tradeInValue: parseInt(e.target.value) || 0 } })}
-                    placeholder="0"
-                    disabled={!inv.tradeIn}
-                  />
+                  <Input type="number" value={inv.payment.tradeInValue} onChange={(e) => update({ payment: { ...inv.payment, tradeInValue: parseInt(e.target.value) || 0 } })} placeholder="0" disabled={!inv.tradeIn} />
                   {!inv.tradeIn && <p className="text-xs text-muted-foreground">Aktifkan Trade-In di atas untuk menggunakan nilai trade-in</p>}
                 </div>
 
                 <div className="space-y-2">
                   <Label>Catatan Pembayaran</Label>
-                  <Textarea
-                    value={inv.payment.notes || ''}
-                    onChange={(e) => update({ payment: { ...inv.payment, notes: e.target.value } })}
-                    placeholder="Catatan pembayaran..."
-                    rows={2}
-                  />
+                  <Textarea value={inv.payment.notes || ''} onChange={(e) => update({ payment: { ...inv.payment, notes: e.target.value } })} placeholder="Catatan pembayaran..." rows={2} />
                 </div>
               </div>
 
@@ -610,9 +505,7 @@ export default function PhoneEditor() {
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
                   <span>Sisa Pembayaran</span>
-                  <span className={totals.remaining > 0 ? "text-rose-600" : "text-emerald-600"}>
-                    {formatRupiah(totals.remaining)}
-                  </span>
+                  <span className={totals.remaining > 0 ? 'text-rose-600' : 'text-emerald-600'}>{formatRupiah(totals.remaining)}</span>
                 </div>
               </div>
             </CardContent>
@@ -620,7 +513,6 @@ export default function PhoneEditor() {
         </TabsContent>
       </Tabs>
 
-      {/* Action Buttons */}
       <div className="flex flex-wrap gap-2 sticky bottom-0 bg-background p-2 border-t">
         <Button onClick={handleSave} className="gap-2">
           <Save className="h-4 w-4" /> Simpan
@@ -633,19 +525,24 @@ export default function PhoneEditor() {
   );
 }
 
-// Customer history display component
 function CustomerHistoryDisplay({ phone }: { phone: string }) {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('cp_users_v1');
-      if (raw) {
-        const users = JSON.parse(raw);
-        const found = users.find((u: any) => u.phone === phone);
-        if (found) setUser(found);
+    let mounted = true;
+
+    (async () => {
+      try {
+        const found = await getUserByPhone(phone);
+        if (mounted) setUser(found);
+      } catch {
+        if (mounted) setUser(null);
       }
-    } catch {}
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [phone]);
 
   if (!user) return null;
@@ -657,4 +554,20 @@ function CustomerHistoryDisplay({ phone }: { phone: string }) {
       </div>
     </div>
   );
+}
+
+function normalizePhoneInvoice(value: CirclePhoneInvoice): CirclePhoneInvoice {
+  return {
+    ...value,
+    items: Array.isArray(value.items) && value.items.length > 0
+      ? value.items
+      : [{ ...BLANK_SALES_ITEM, id: newId() }],
+    payment: {
+      downPayment: value.payment?.downPayment ?? 0,
+      tradeInValue: value.payment?.tradeInValue ?? 0,
+      remaining: value.payment?.remaining ?? 0,
+      method: value.payment?.method || 'Transfer Bank',
+      notes: value.payment?.notes || '',
+    },
+  };
 }

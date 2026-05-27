@@ -129,7 +129,7 @@ export async function upsertInvoice(invoice: Invoice): Promise<Invoice[]> {
   try {
     const dbData = mapAppInvoiceToDb(invoice);
 
-    if (invoice.id && await invoiceExists(invoice.id)) {
+    if (invoice.id && (await invoiceExists(invoice.id))) {
       await circlePairApi.update(dbData);
     } else {
       await circlePairApi.create(dbData);
@@ -153,6 +153,7 @@ export async function deleteInvoice(id: string): Promise<Invoice[]> {
 }
 
 async function invoiceExists(id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
   try {
     await circlePairApi.getById(id);
     return true;
@@ -274,7 +275,7 @@ function mapAppInvoiceToDb(app: Invoice): any {
     companyEmail: app.company.email,
     companyPhone: app.company.phone,
     companyAddress: app.company.address,
-    items: app.items.map(item => ({
+    items: app.items.map((item) => ({
       name: item.name,
       description: item.description,
       qty: item.qty,
@@ -322,7 +323,7 @@ export async function upsertPhoneInvoice(invoice: CirclePhoneInvoice): Promise<C
   try {
     const dbData = mapAppPhoneInvoiceToDb(invoice);
 
-    if (invoice.id && await phoneInvoiceExists(invoice.id)) {
+    if (invoice.id && (await phoneInvoiceExists(invoice.id))) {
       await circlePhoneApi.update(dbData);
     } else {
       await circlePhoneApi.create(dbData);
@@ -346,12 +347,17 @@ export async function deletePhoneInvoice(id: string): Promise<CirclePhoneInvoice
 }
 
 async function phoneInvoiceExists(id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
   try {
     await circlePhoneApi.getById(id);
     return true;
   } catch {
     return false;
   }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
@@ -419,7 +425,7 @@ function mapAppPhoneInvoiceToDb(app: CirclePhoneInvoice): any {
     paymentMethod: app.payment.method,
     paymentNotes: app.payment.notes,
     notes: app.notes,
-    items: app.items.map(item => ({
+    items: app.items.map((item) => ({
       itemType: item.itemType,
       name: item.name,
       description: item.description,
@@ -436,9 +442,21 @@ function mapAppPhoneInvoiceToDb(app: CirclePhoneInvoice): any {
 }
 
 // Stubs for functions that would be handled by the backend
-export function saveCompany() { return Promise.resolve(); }
-export function loadCompany() { return Promise.resolve(null); }
-export function updateUserStats() { return Promise.resolve(null); }
-export function addServiceHistory() { return Promise.resolve(); }
-export function getUserHistory() { return Promise.resolve([]); }
-export function getUserCompleteProfile() { return Promise.resolve({ user: null, serviceHistory: [], circlePairCount: 0, circlePhoneCount: 0 }); }
+export function saveCompany() {
+  return Promise.resolve();
+}
+export function loadCompany() {
+  return Promise.resolve(null);
+}
+export function updateUserStats() {
+  return Promise.resolve(null);
+}
+export function addServiceHistory() {
+  return Promise.resolve();
+}
+export function getUserHistory() {
+  return Promise.resolve([]);
+}
+export function getUserCompleteProfile() {
+  return Promise.resolve({ user: null, serviceHistory: [], circlePairCount: 0, circlePhoneCount: 0 });
+}

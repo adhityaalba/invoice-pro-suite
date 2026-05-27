@@ -223,12 +223,15 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_circle_pair_updated_at ON circle_pair_invoices;
 CREATE TRIGGER update_circle_pair_updated_at BEFORE UPDATE ON circle_pair_invoices
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_circle_phone_updated_at ON circle_phone_invoices;
 CREATE TRIGGER update_circle_phone_updated_at BEFORE UPDATE ON circle_phone_invoices
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -251,5 +254,6 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_company_profiles_updated_at ON company_profiles;
 CREATE TRIGGER update_company_profiles_updated_at BEFORE UPDATE ON company_profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
