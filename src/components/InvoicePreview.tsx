@@ -3,9 +3,10 @@ import { calcTotals } from '@/lib/calc';
 import { formatDateID, formatRupiah } from '@/lib/format';
 import { Mail, Phone, MapPin, StickyNote, Wallet, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import type { TradeInDevice } from '@/types/circle-phone';
 
 interface Props {
-  invoice: Invoice;
+  invoice: Invoice & { tradeIn?: TradeInDevice };
 }
 
 export default function InvoicePreview({ invoice }: Props) {
@@ -165,6 +166,43 @@ export default function InvoicePreview({ invoice }: Props) {
                 )}
               </div>
             </div>
+
+            {/* Trade-In */}
+            {invoice.tradeIn && (invoice.tradeIn.model || invoice.tradeIn.storage || invoice.tradeIn.color || invoice.tradeIn.imei || invoice.tradeIn.notes) && (
+              <div>
+                <SectionTitle>Trade-In</SectionTitle>
+                <table className="mt-1 w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr style={{ background: 'hsl(var(--doc-surface-2))' }}>
+                      <Th>Model</Th>
+                      <Th>Storage</Th>
+                      <Th>Color</Th>
+                      <Th>IMEI / SN</Th>
+                      <Th>Condition</Th>
+                      <Th className="text-right w-24">Estimasi</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t doc-divider align-top">
+                      <Td>
+                        <div className="font-medium">{invoice.tradeIn.model || '-'}</div>
+                      </Td>
+                      <Td>{invoice.tradeIn.storage || '-'}</Td>
+                      <Td>{invoice.tradeIn.color || '-'}</Td>
+                      <Td className="font-mono">{invoice.tradeIn.imei || '-'}</Td>
+                      <Td>{invoice.tradeIn.condition || '-'}</Td>
+                      <Td className="text-right">{formatRupiah(invoice.tradeIn.estimatedPrice || 0)}</Td>
+                    </tr>
+                  </tbody>
+                </table>
+                {invoice.tradeIn.notes && (
+                  <div className="mt-1 doc-card-2 rounded p-2 text-[10px]">
+                    <div className="doc-muted uppercase text-[9px] tracking-wider mb-0.5">Keterangan Trade-In</div>
+                    <div className="whitespace-pre-wrap">{invoice.tradeIn.notes}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Items */}
             <div>

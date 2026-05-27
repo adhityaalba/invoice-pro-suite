@@ -34,11 +34,7 @@ export async function loadUsers(): Promise<UserProfile[]> {
   }
 }
 
-export async function findOrCreateUser(
-  name: string,
-  phone: string,
-  extra?: Partial<UserProfile>
-): Promise<UserProfile> {
+export async function findOrCreateUser(name: string, phone: string, extra?: Partial<UserProfile>): Promise<UserProfile> {
   try {
     const payload = {
       name,
@@ -162,25 +158,28 @@ function isUuid(value: string): boolean {
 }
 
 function mapDbInvoiceToApp(db: any): Invoice {
-  const items = db.items !== undefined ? db.items.map((item: any) => ({
-    id: item.id,
-    name: item.name,
-    description: item.description || '',
-    qty: item.qty,
-    unitPrice: item.unit_price,
-    discount: item.discount,
-    tax: item.tax_percent,
-  })) : [
-    {
-      id: 'dummy',
-      name: 'Service Charge',
-      description: 'Layanan perbaikan gadget',
-      qty: 1,
-      unitPrice: db.grand_total || 0,
-      discount: 0,
-      tax: 0,
-    }
-  ];
+  const items =
+    db.items !== undefined
+      ? db.items.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || '',
+          qty: item.qty,
+          unitPrice: item.unit_price,
+          discount: item.discount,
+          tax: item.tax_percent,
+        }))
+      : [
+          {
+            id: 'dummy',
+            name: 'Service Charge',
+            description: 'Layanan perbaikan gadget',
+            qty: 1,
+            unitPrice: db.grand_total || 0,
+            discount: 0,
+            tax: 0,
+          },
+        ];
 
   return {
     id: db.id,
@@ -341,7 +340,13 @@ export async function upsertPhoneInvoice(invoice: CirclePhoneInvoice): Promise<C
       await circlePhoneApi.create(dbData);
     }
 
-    return await loadPhoneInvoices();
+    const [list, saved] = await Promise.all([loadPhoneInvoices(), getPhoneInvoice(invoice.id)]);
+
+    if (!saved) {
+      return list;
+    }
+
+    return [saved, ...list.filter((row) => row.id !== saved.id)];
   } catch (error) {
     console.error('Failed to upsert phone invoice:', error);
     throw error;
@@ -373,32 +378,48 @@ function isUuid(value: string): boolean {
 }
 
 function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
-  const items = db.items !== undefined ? db.items.map((item: any) => ({
-    id: item.id,
-    itemType: item.item_type,
-    name: item.name,
-    description: item.description || '',
-    qty: item.qty,
-    unitPrice: item.unit_price,
-    discount: item.discount,
-    imei: item.imei || '',
-    storage: item.storage || '',
-    color: item.color || '',
-    condition: item.condition || '',
-  })) : [
-    {
-      id: 'dummy',
-      itemType: 'device' as const,
-      name: 'Sales Device',
-      qty: 1,
-      unitPrice: db.subtotal || 0,
-      discount: 0,
-      imei: '',
-      storage: '',
-      color: '',
-      condition: '',
-    }
-  ];
+  const rawTradeIn = db.tradeIn || db.trade_in || null;
+  const mappedTradeIn = rawTradeIn
+    ? {
+        model: rawTradeIn.model || '',
+        storage: rawTradeIn.storage || '',
+        color: rawTradeIn.color || '',
+        imei: rawTradeIn.imei || '',
+        condition: rawTradeIn.condition || 'lecet',
+        estimatedPrice: rawTradeIn.estimatedPrice ?? rawTradeIn.estimated_price ?? 0,
+        notes: rawTradeIn.notes || '',
+      }
+    : undefined;
+
+  const items =
+    db.items !== undefined
+      ? db.items.map((item: any) => ({
+          id: item.id,
+          itemType: item.item_type,
+          name: item.name,
+          description: item.description || '',
+          qty: item.qty,
+          unitPrice: item.unit_price,
+          discount: item.discount,
+          imei: item.imei || '',
+          storage: item.storage || '',
+          color: item.color || '',
+          condition: item.condition || '',
+        }))
+      : [
+          {
+            id: 'dummy',
+            itemType: 'device' as const,
+            name: 'Sales Device',
+            qty: 1,
+            unitPrice: db.subtotal || 0,
+            discount: 0,
+            imei: '',
+            storage: '',
+            color: '',
+            condition: '',
+          },
+        ];
 
   const deviceItem = items.find((i: any) => i.itemType === 'device') || items[0];
 
@@ -427,7 +448,7 @@ function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
       method: db.payment_method || '',
       notes: db.payment_notes || '',
     },
-    tradeIn: db.trade_in || undefined,
+    tradeIn: mappedTradeIn,
     notes: db.notes || '',
     createdAt: db.created_at,
     updatedAt: db.updated_at,
