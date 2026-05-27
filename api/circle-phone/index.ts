@@ -1,7 +1,7 @@
 // API Route: /api/circle-phone
 // Vercel Serverless Function for Circle Phone (Sales) invoices
 
-import { sql } from '../db-client';
+import { sql } from '../db-client.js';
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);

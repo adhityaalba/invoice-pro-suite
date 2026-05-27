@@ -1,7 +1,7 @@
 // API Route: /api/circle-pair
 // Vercel Serverless Function for Circle Pair (Service) invoices
 
-import { sql } from '../db-client';
+import { sql } from '../db-client.js';
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
