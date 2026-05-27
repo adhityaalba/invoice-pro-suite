@@ -1,7 +1,7 @@
 // API Route: /api/users
 // Vercel Serverless Function for managing users
 
-import { sql } from '../db-client.ts';
+import { sql } from '../db-client';
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
