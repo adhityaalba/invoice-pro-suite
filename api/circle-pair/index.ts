@@ -5,21 +5,19 @@ import { sql } from '../db-client.js';
 
 function buildUpdateStatement(updates: Record<string, any>, id: string) {
   const entries = Object.entries(updates);
-  const strings = ['UPDATE circle_pair_invoices SET '];
+  const parts: string[] = [];
   const values: any[] = [];
 
   entries.forEach(([key, value], index) => {
     const dbColumn = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-    strings[strings.length - 1] += `${index > 0 ? ', ' : ''}${dbColumn} = `;
+    parts.push(`${dbColumn} = $${index + 1}`);
     values.push(value);
-    strings.push('');
   });
 
-  strings[strings.length - 1] += ' WHERE id = ';
+  const text = `UPDATE circle_pair_invoices SET ${parts.join(', ')} WHERE id = $${values.length + 1} RETURNING *`;
   values.push(id);
-  strings.push(' RETURNING *');
 
-  return { strings, values };
+  return { text, values };
 }
 
 export default async function handler(req: Request) {
@@ -184,9 +182,9 @@ export default async function handler(req: Request) {
     if (method === 'PUT') {
       const body = await req.json();
       const { id, items, signatures, ...updates } = body;
-      const { strings, values } = buildUpdateStatement(updates, id);
+      const { text, values } = buildUpdateStatement(updates, id);
 
-      const result = await sql(strings as any, ...values);
+      const result = await sql.query(text, values);
 
       if (result.length === 0) {
         return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
