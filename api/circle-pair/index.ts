@@ -3,6 +3,25 @@
 
 import { sql } from '../db-client.js';
 
+function buildUpdateStatement(updates: Record<string, any>, id: string) {
+  const entries = Object.entries(updates);
+  const strings = ['UPDATE circle_pair_invoices SET '];
+  const values: any[] = [];
+
+  entries.forEach(([key, value], index) => {
+    const dbColumn = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    strings[strings.length - 1] += `${index > 0 ? ', ' : ''}${dbColumn} = `;
+    values.push(value);
+    strings.push('');
+  });
+
+  strings[strings.length - 1] += ' WHERE id = ';
+  values.push(id);
+  strings.push(' RETURNING *');
+
+  return { strings, values };
+}
+
 export default async function handler(req: Request) {
   const url = new URL(req.url);
   const method = req.method;
@@ -165,13 +184,9 @@ export default async function handler(req: Request) {
     if (method === 'PUT') {
       const body = await req.json();
       const { id, items, signatures, ...updates } = body;
+      const { strings, values } = buildUpdateStatement(updates, id);
 
-      const result = await sql`
-        UPDATE circle_pair_invoices
-        SET ${sql(updates)}
-        WHERE id = ${id}
-        RETURNING *
-      `;
+      const result = await sql(strings as any, ...values);
 
       if (result.length === 0) {
         return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
