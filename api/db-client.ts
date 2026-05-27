@@ -15,7 +15,8 @@ async function getSqlClient() {
   const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1') || connectionString.includes('::1');
 
   if (isLocal) {
-    sqlClientPromise = import('pg')
+    const pgModuleName = ['p', 'g'].join('');
+    sqlClientPromise = import(pgModuleName)
       .then(({ default: pg }) => {
         const pool = new pg.Pool({ connectionString });
 
