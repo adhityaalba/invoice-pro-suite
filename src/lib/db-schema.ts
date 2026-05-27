@@ -1,0 +1,142 @@
+// Drizzle ORM Schema for Invoice Pro Suite
+
+import { pgTable, uuid, varchar, text, integer, timestamp, boolean, jsonb, date } from 'drizzle-orm/pg-core';
+
+export const users = pgTable('users', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 50 }).notNull().unique(),
+  email: varchar('email', { length: 255 }),
+  address: text('address'),
+  instagram: varchar('instagram', { length: 100 }),
+  notes: text('notes'),
+  totalServices: integer('total_services').default(0),
+  totalPurchases: integer('total_purchases').default(0),
+  lastVisit: timestamp('last_visit'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const circlePairInvoices = pgTable('circle_pair_invoices', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  number: varchar('number', { length: 100 }).notNull().unique(),
+  customerId: uuid('customer_id').references(() => users.id, { onDelete: 'set null' }),
+  customerName: varchar('customer_name', { length: 255 }).notNull(),
+  customerPhone: varchar('customer_phone', { length: 50 }).notNull(),
+  customerEmail: varchar('customer_email', { length: 255 }),
+  customerAddress: text('customer_address'),
+  customerPin: varchar('customer_pin', { length: 20 }),
+  customerNotes: text('customer_notes'),
+  deviceType: varchar('device_type', { length: 100 }),
+  deviceStorage: varchar('device_storage', { length: 50 }),
+  deviceColor: varchar('device_color', { length: 50 }),
+  deviceImei: varchar('device_imei', { length: 100 }),
+  deviceComplaint: text('device_complaint'),
+  deviceDiagnosis: text('device_diagnosis'),
+  deviceWarrantyStatus: varchar('device_warranty_status', { length: 100 }),
+  date: date('date').notNull(),
+  dueDate: date('due_date').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  documentType: varchar('document_type', { length: 20 }).notNull().default('service_order'),
+  subtotal: integer('subtotal').default(0),
+  discountTotal: integer('discount_total').default(0),
+  taxTotal: integer('tax_total').default(0),
+  grandTotal: integer('grand_total').default(0),
+  downPayment: integer('down_payment').default(0),
+  remainingAmount: integer('remaining_amount').default(0),
+  notes: text('notes'),
+  termsWarranty: text('terms_warranty'),
+  termsGeneral: text('terms_general'),
+  templateSettings: jsonb('template_settings'),
+  companyName: varchar('company_name', { length: 100 }),
+  companyEmail: varchar('company_email', { length: 255 }),
+  companyPhone: varchar('company_phone', { length: 50 }),
+  companyAddress: text('company_address'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const circlePairItems = pgTable('circle_pair_items', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  invoiceId: uuid('invoice_id').notNull().references(() => circlePairInvoices.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  qty: integer('qty').notNull().default(1),
+  unitPrice: integer('unit_price').notNull().default(0),
+  discount: integer('discount').default(0),
+  taxPercent: integer('tax_percent').default(0),
+});
+
+export const circlePairSignatures = pgTable('circle_pair_signatures', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  invoiceId: uuid('invoice_id').notNull().references(() => circlePairInvoices.id, { onDelete: 'cascade' }),
+  customerSignature: text('customer_signature'),
+  companySignature: text('company_signature'),
+  customerInDate: date('customer_in_date'),
+  customerOutDate: date('customer_out_date'),
+  companyInDate: date('company_in_date'),
+  companyOutDate: date('company_out_date'),
+});
+
+export const circlePhoneInvoices = pgTable('circle_phone_invoices', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  number: varchar('number', { length: 100 }).notNull().unique(),
+  customerId: uuid('customer_id').references(() => users.id, { onDelete: 'set null' }),
+  customerName: varchar('customer_name', { length: 255 }).notNull(),
+  customerPhone: varchar('customer_phone', { length: 50 }).notNull(),
+  customerEmail: varchar('customer_email', { length: 255 }),
+  customerAddress: text('customer_address'),
+  customerInstagram: varchar('customer_instagram', { length: 100 }),
+  date: date('date').notNull(),
+  dueDate: date('due_date').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  subtotal: integer('subtotal').default(0),
+  downPayment: integer('down_payment').default(0),
+  tradeInValue: integer('trade_in_value').default(0),
+  remainingAmount: integer('remaining_amount').default(0),
+  paymentMethod: varchar('payment_method', { length: 50 }),
+  paymentNotes: text('payment_notes'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const circlePhoneItems = pgTable('circle_phone_items', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  invoiceId: uuid('invoice_id').notNull().references(() => circlePhoneInvoices.id, { onDelete: 'cascade' }),
+  itemType: varchar('item_type', { length: 20 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  qty: integer('qty').notNull().default(1),
+  unitPrice: integer('unit_price').notNull().default(0),
+  discount: integer('discount').default(0),
+  imei: varchar('imei', { length: 100 }),
+  storage: varchar('storage', { length: 50 }),
+  color: varchar('color', { length: 50 }),
+  condition: varchar('condition', { length: 50 }),
+});
+
+export const circlePhoneTradeIns = pgTable('circle_phone_trade_ins', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  invoiceId: uuid('invoice_id').notNull().references(() => circlePhoneInvoices.id, { onDelete: 'cascade' }),
+  model: varchar('model', { length: 100 }),
+  storage: varchar('storage', { length: 50 }),
+  color: varchar('color', { length: 50 }),
+  imei: varchar('imei', { length: 100 }),
+  condition: varchar('condition', { length: 50 }),
+  estimatedPrice: integer('estimated_price').default(0),
+  notes: text('notes'),
+});
+
+export const serviceHistory = pgTable('service_history', {
+  id: uuid('id').primaryKeyDefault().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  invoiceId: uuid('invoice_id').notNull(),
+  invoiceNumber: varchar('invoice_number', { length: 100 }).notNull(),
+  type: varchar('type', { length: 20 }).notNull(),
+  date: date('date').notNull(),
+  deviceModel: varchar('device_model', { length: 100 }),
+  amount: integer('amount').notNull(),
+  status: varchar('status', { length: 50 }),
+  createdAt: timestamp('created_at').defaultNow(),
+});

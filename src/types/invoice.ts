@@ -1,5 +1,6 @@
 export type InvoiceStatus = 'draft' | 'paid' | 'unpaid' | 'partial';
 export type DocumentType = 'invoice' | 'service_order';
+export type CompanyType = 'circle-pair' | 'circle-phone';
 
 export interface CompanyProfile {
   name: string;
@@ -75,6 +76,7 @@ export interface Invoice {
   dueDate: string;
   status: InvoiceStatus;
   documentType: DocumentType;
+  companyType: CompanyType;
   customer: Customer;
   device: Device;
   items: InvoiceItem[];
@@ -109,4 +111,20 @@ export const DEFAULT_COMPANY: CompanyProfile = {
   paymentMethods: 'BCA 1234567890 a.n. Circle Pair\nDANA / OVO / GoPay: 081234567890',
   defaultTermsWarranty: DEFAULT_TERMS_WARRANTY,
   defaultTermsGeneral: DEFAULT_TERMS_GENERAL,
+};
+
+export const DEFAULT_COMPANY_CIRCLE_PHONE: CompanyProfile = {
+  name: 'Circle Phone',
+  tagline: 'Gadget Service & Repair',
+  email: 'circlephone.id@gmail.com',
+  phone: '+62 877-3916-9797',
+  address: 'Jl. Kyai Saleh No.1108, Mugassari, Kec. Semarang Sel., Kota Semarang, Jawa Tengah 50244',
+  brandColor: '#3B82F6',
+  paymentMethods: 'BCA 1234567890 a.n. Circle Phone\nDANA / OVO / GoPay: 081234567890',
+  defaultTermsWarranty: DEFAULT_TERMS_WARRANTY,
+  defaultTermsGeneral: DEFAULT_TERMS_GENERAL,
+};
+
+export const getCompanyByType = (type: CompanyType): CompanyProfile => {
+  return type === 'circle-phone' ? DEFAULT_COMPANY_CIRCLE_PHONE : DEFAULT_COMPANY;
 };

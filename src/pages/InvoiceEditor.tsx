@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,8 @@ import InvoicePreview from '@/components/InvoicePreview';
 import SignaturePad from '@/components/SignaturePad';
 import ImageUpload from '@/components/ImageUpload';
 import { blankInvoice } from '@/lib/seed';
-import { getInvoice, loadCompany, saveCompany, upsertInvoice } from '@/lib/storage';
-import type { Invoice, InvoiceItem } from '@/types/invoice';
+import { getInvoice, saveCompany, upsertInvoice } from '@/lib/storage';
+import { getCompanyByType, type Invoice, type InvoiceItem } from '@/types/invoice';
 import { newId, formatRupiah } from '@/lib/format';
 import { calcTotals } from '@/lib/calc';
 import { toast } from 'sonner';
@@ -23,12 +23,15 @@ import { toast } from 'sonner';
 export default function InvoiceEditor() {
   const { id } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const [inv, setInv] = useState<Invoice>(() => {
     if (id && id !== 'new') {
       const existing = getInvoice(id);
       if (existing) return existing;
     }
-    return blankInvoice(loadCompany());
+    // Get companyType from navigation state
+    const companyType = (location.state as { companyType?: 'circle-pair' | 'circle-phone' })?.companyType || 'circle-pair';
+    return blankInvoice(getCompanyByType(companyType), companyType);
   });
 
   // Re-load on id change

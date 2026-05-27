@@ -13,13 +13,14 @@ export const newInvoiceNumber = () => {
   return `CP-${ymd}-${rnd}`;
 };
 
-export const blankInvoice = (company: CompanyProfile): Invoice => ({
+export const blankInvoice = (company: CompanyProfile, companyType: 'circle-pair' | 'circle-phone' = 'circle-pair'): Invoice => ({
   id: newId(),
   number: newInvoiceNumber(),
   date: todayISO(),
   dueDate: todayISO(),
   status: "draft",
   documentType: "service_order",
+  companyType,
   customer: { name: "", phone: "", email: "", address: "", pin: "", notes: "" },
   device: { type: "", storage: "", color: "", imei: "", complaint: "", diagnosis: "", warrantyStatus: "Non-Garansi" },
   items: [
@@ -42,8 +43,8 @@ export const blankInvoice = (company: CompanyProfile): Invoice => ({
   updatedAt: new Date().toISOString(),
 });
 
-export const seedInvoice = (company: CompanyProfile): Invoice => {
-  const inv = blankInvoice(company);
+export const seedInvoice = (company: CompanyProfile, companyType: 'circle-pair' | 'circle-phone' = 'circle-pair'): Invoice => {
+  const inv = blankInvoice(company, companyType);
   inv.number = "CP-DEMO-001";
   inv.status = "partial";
   inv.documentType = "service_order";
