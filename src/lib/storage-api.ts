@@ -5,6 +5,7 @@ import { usersApi, circlePairApi, circlePhoneApi } from './api-client';
 import type { Invoice } from '@/types/invoice';
 import type { CirclePhoneInvoice } from '@/types/circle-phone';
 import type { UserProfile } from '@/types/user';
+import { calcTotals } from './calc';
 
 // ============================================
 // USERS
@@ -33,28 +34,22 @@ export async function loadUsers(): Promise<UserProfile[]> {
   }
 }
 
-export async function findOrCreateUser(name: string, phone: string): Promise<UserProfile> {
+export async function findOrCreateUser(
+  name: string,
+  phone: string,
+  extra?: Partial<UserProfile>
+): Promise<UserProfile> {
   try {
-    const existing = await usersApi.getByPhone(phone);
+    const payload = {
+      name,
+      phone,
+      email: extra?.email || undefined,
+      address: extra?.address || undefined,
+      instagram: extra?.instagram || undefined,
+      notes: extra?.notes || undefined,
+    };
 
-    if (existing) {
-      return {
-        id: existing.id,
-        name: existing.name,
-        phone: existing.phone,
-        email: existing.email || '',
-        address: existing.address || '',
-        instagram: existing.instagram || '',
-        notes: existing.notes || '',
-        totalServices: existing.total_services || 0,
-        totalPurchases: existing.total_purchases || 0,
-        lastVisit: existing.last_visit || '',
-        createdAt: existing.created_at,
-        updatedAt: existing.updated_at,
-      };
-    }
-
-    const created = await usersApi.create({ name, phone });
+    const created = await usersApi.create(payload);
     return {
       id: created.id,
       name: created.name,
@@ -162,7 +157,31 @@ async function invoiceExists(id: string): Promise<boolean> {
   }
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function mapDbInvoiceToApp(db: any): Invoice {
+  const items = db.items !== undefined ? db.items.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description || '',
+    qty: item.qty,
+    unitPrice: item.unit_price,
+    discount: item.discount,
+    tax: item.tax_percent,
+  })) : [
+    {
+      id: 'dummy',
+      name: 'Service Charge',
+      description: 'Layanan perbaikan gadget',
+      qty: 1,
+      unitPrice: db.grand_total || 0,
+      discount: 0,
+      tax: 0,
+    }
+  ];
+
   return {
     id: db.id,
     number: db.number,
@@ -188,17 +207,9 @@ function mapDbInvoiceToApp(db: any): Invoice {
       diagnosis: db.device_diagnosis || '',
       warrantyStatus: db.device_warranty_status || '',
     },
-    items: (db.items || []).map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description || '',
-      qty: item.qty,
-      unitPrice: item.unit_price,
-      discount: item.discount,
-      tax: item.tax_percent,
-    })),
+    items,
     payment: {
-      downPayment: db.down_payment,
+      downPayment: db.down_payment || 0,
       method: '',
       notes: '',
     },
@@ -240,10 +251,11 @@ function mapDbInvoiceToApp(db: any): Invoice {
 }
 
 function mapAppInvoiceToDb(app: Invoice): any {
+  const totals = calcTotals(app);
   return {
     id: app.id,
     number: app.number,
-    customerId: null, // Will be resolved from phone
+    customerId: app.customerId || null,
     customerName: app.customer.name,
     customerPhone: app.customer.phone,
     customerEmail: app.customer.email || null,
@@ -261,12 +273,12 @@ function mapAppInvoiceToDb(app: Invoice): any {
     dueDate: app.dueDate,
     status: app.status,
     documentType: app.documentType,
-    subtotal: 0,
-    discountTotal: 0,
-    taxTotal: 0,
-    grandTotal: 0,
-    downPayment: app.payment.downPayment,
-    remainingAmount: 0,
+    subtotal: totals.subtotal,
+    discountTotal: totals.discountTotal,
+    taxTotal: totals.taxTotal,
+    grandTotal: totals.grandTotal,
+    downPayment: totals.downPayment,
+    remainingAmount: totals.remaining,
     notes: app.notes,
     termsWarranty: app.terms.warranty,
     termsGeneral: app.terms.general,
@@ -361,6 +373,35 @@ function isUuid(value: string): boolean {
 }
 
 function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
+  const items = db.items !== undefined ? db.items.map((item: any) => ({
+    id: item.id,
+    itemType: item.item_type,
+    name: item.name,
+    description: item.description || '',
+    qty: item.qty,
+    unitPrice: item.unit_price,
+    discount: item.discount,
+    imei: item.imei || '',
+    storage: item.storage || '',
+    color: item.color || '',
+    condition: item.condition || '',
+  })) : [
+    {
+      id: 'dummy',
+      itemType: 'device' as const,
+      name: 'Sales Device',
+      qty: 1,
+      unitPrice: db.subtotal || 0,
+      discount: 0,
+      imei: '',
+      storage: '',
+      color: '',
+      condition: '',
+    }
+  ];
+
+  const deviceItem = items.find((i: any) => i.itemType === 'device') || items[0];
+
   return {
     id: db.id,
     number: db.number,
@@ -373,28 +414,16 @@ function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
     date: db.date,
     dueDate: db.due_date,
     status: db.status,
-    deviceModel: '',
-    deviceStorage: '',
-    deviceColor: '',
-    deviceImei: '',
-    deviceCondition: '',
-    items: (db.items || []).map((item: any) => ({
-      id: item.id,
-      itemType: item.item_type,
-      name: item.name,
-      description: item.description || '',
-      qty: item.qty,
-      unitPrice: item.unit_price,
-      discount: item.discount,
-      imei: item.imei || '',
-      storage: item.storage || '',
-      color: item.color || '',
-      condition: item.condition || '',
-    })),
+    deviceModel: deviceItem?.name || '',
+    deviceStorage: deviceItem?.storage || '',
+    deviceColor: deviceItem?.color || '',
+    deviceImei: deviceItem?.imei || '',
+    deviceCondition: deviceItem?.condition || '',
+    items,
     payment: {
-      downPayment: db.down_payment,
-      tradeInValue: db.trade_in_value,
-      remaining: db.remaining_amount,
+      downPayment: db.down_payment || 0,
+      tradeInValue: db.trade_in_value || 0,
+      remaining: db.remaining_amount || 0,
       method: db.payment_method || '',
       notes: db.payment_notes || '',
     },
@@ -406,6 +435,9 @@ function mapDbPhoneInvoiceToApp(db: any): CirclePhoneInvoice {
 }
 
 function mapAppPhoneInvoiceToDb(app: CirclePhoneInvoice): any {
+  const subtotal = app.items.reduce((sum, item) => sum + (item.qty * item.unitPrice - item.discount), 0);
+  const remaining = Math.max(0, subtotal - app.payment.downPayment - (app.payment.tradeInValue || 0));
+
   return {
     id: app.id,
     number: app.number,
@@ -418,10 +450,10 @@ function mapAppPhoneInvoiceToDb(app: CirclePhoneInvoice): any {
     date: app.date,
     dueDate: app.dueDate,
     status: app.status,
-    subtotal: 0,
+    subtotal: subtotal,
     downPayment: app.payment.downPayment,
     tradeInValue: app.payment.tradeInValue,
-    remainingAmount: app.payment.remaining,
+    remainingAmount: remaining,
     paymentMethod: app.payment.method,
     paymentNotes: app.payment.notes,
     notes: app.notes,

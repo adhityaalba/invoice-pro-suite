@@ -1,9 +1,7 @@
 // API Route: /api/circle-phone
 // Vercel Serverless Function for Circle Phone (Sales) invoices
 
-import { neon } from '@neondatabase/serverless';
-
-const sql = neon(process.env.DATABASE_URL!);
+import { sql } from '../db-client.ts';
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
@@ -41,11 +39,14 @@ export default async function handler(req: Request) {
           SELECT * FROM circle_phone_trade_ins WHERE invoice_id = ${id}
         `;
 
-        return Response.json({
-          ...invoice[0],
-          items,
-          tradeIn: tradeIn[0] || null,
-        }, { headers: corsHeaders });
+        return Response.json(
+          {
+            ...invoice[0],
+            items,
+            tradeIn: tradeIn[0] || null,
+          },
+          { headers: corsHeaders },
+        );
       }
 
       const invoices = await sql`
@@ -189,7 +190,7 @@ export default async function handler(req: Request) {
       // Update trade-in
       if (tradeIn !== undefined) {
         await sql`DELETE FROM circle_phone_trade_ins WHERE invoice_id = ${id}`;
-        if (tradeIn.model) {
+        if (tradeIn && tradeIn.model) {
           await sql`
             INSERT INTO circle_phone_trade_ins (
               invoice_id, model, storage, color, imei, condition, estimated_price, notes

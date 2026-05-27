@@ -14,7 +14,9 @@ import InvoicePreview from '@/components/InvoicePreview';
 import SignaturePad from '@/components/SignaturePad';
 import ImageUpload from '@/components/ImageUpload';
 import { blankInvoice } from '@/lib/seed';
-import { getInvoice, saveCompany, upsertInvoice } from '@/lib/storage';
+import { saveCompany, loadCompany } from '@/lib/storage';
+import { getInvoice, upsertInvoice, findOrCreateUser, loadUsers } from '@/lib/storage-api';
+import type { UserProfile } from '@/types/user';
 import { getCompanyByType, type Invoice, type InvoiceItem } from '@/types/invoice';
 import { newId, formatRupiah } from '@/lib/format';
 import { calcTotals } from '@/lib/calc';
@@ -25,22 +27,74 @@ export default function InvoiceEditor() {
   const nav = useNavigate();
   const location = useLocation();
   const [inv, setInv] = useState<Invoice>(() => {
-    if (id && id !== 'new') {
-      const existing = getInvoice(id);
-      if (existing) return existing;
-    }
-    // Get companyType from navigation state
     const companyType = (location.state as { companyType?: 'circle-pair' | 'circle-phone' })?.companyType || 'circle-pair';
     return blankInvoice(getCompanyByType(companyType), companyType);
   });
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('new');
+
+  useEffect(() => {
+    loadUsers()
+      .then((list) => {
+        setUsers(list);
+        if (inv.customer.phone) {
+          const found = list.find((u) => u.phone === inv.customer.phone);
+          if (found) setSelectedUserId(found.id);
+        }
+      })
+      .catch((err) => console.warn('Failed to load users', err));
+  }, []);
+
+  const handleCustomerChange = (userId: string) => {
+    setSelectedUserId(userId);
+    if (userId === 'new') {
+      update({
+        customer: {
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          pin: '',
+          notes: '',
+        },
+      });
+    } else {
+      const selectedUser = users.find((u) => u.id === userId);
+      if (selectedUser) {
+        update({
+          customer: {
+            name: selectedUser.name,
+            phone: selectedUser.phone,
+            email: selectedUser.email || '',
+            address: selectedUser.address || '',
+            pin: selectedUser.pin || '',
+            notes: selectedUser.notes || '',
+          },
+        });
+      }
+    }
+  };
 
   // Re-load on id change
   useEffect(() => {
+    let mounted = true;
     if (id && id !== 'new') {
-      const e = getInvoice(id);
-      if (e) setInv(e);
+      getInvoice(id)
+        .then((e) => {
+          if (mounted && e) {
+            setInv(e);
+            if (e.customer.phone) {
+              const found = users.find((u) => u.phone === e.customer.phone);
+              if (found) setSelectedUserId(found.id);
+            }
+          }
+        })
+        .catch((err) => console.error('Failed to load invoice:', err));
     }
-  }, [id]);
+    return () => {
+      mounted = false;
+    };
+  }, [id, users]);
 
   const totals = useMemo(() => calcTotals(inv), [inv]);
 
@@ -65,57 +119,48 @@ export default function InvoiceEditor() {
     return errs;
   };
 
-  const save = (silent = false) => {
+  const save = async (silent = false) => {
     const errs = validate();
     if (errs.length) {
       errs.forEach((e) => toast.error(e));
       return false;
     }
     try {
-      upsertInvoice(inv);
-      saveCompany(inv.company);
-      if (!silent) toast.success('Invoice disimpan');
-      if (id === 'new') nav(`/invoice/${inv.id}`, { replace: true });
-
-      // Fire-and-forget: try to sync to serverless API (Neon). Don't block UI or printing.
-      try {
-        // Only attempt remote sync in production (deployed) to avoid errors during local dev
-        if (typeof fetch === 'function' && import.meta.env.PROD) {
-          fetch('/api/invoices', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(inv),
-          })
-            .then((r) => {
-              if (!r.ok) throw new Error('remote save failed');
-              if (!silent) toast.success('Sinkron ke server berhasil');
-            })
-            .catch((err) => {
-              console.warn('Remote save failed', err);
-              if (!silent) toast.error('Gagal menyimpan ke server');
-            });
-        }
-      } catch (e) {
-        console.warn('Failed to start remote sync', e);
+      let nextInv = { ...inv };
+      if (inv.customer.phone) {
+        const userProfile = await findOrCreateUser(inv.customer.name, inv.customer.phone, {
+          email: inv.customer.email,
+          address: inv.customer.address,
+          notes: inv.customer.notes,
+        });
+        nextInv = {
+          ...inv,
+          customerId: userProfile.id,
+        };
       }
+
+      const savedList = await upsertInvoice(nextInv);
+      const saved = savedList.find((row) => row.id === nextInv.id) || savedList[0] || nextInv;
+      setInv(saved);
+
+      if (!silent) toast.success('Invoice disimpan');
+      if (id === 'new') nav(`/invoice/${saved.id}`, { replace: true });
 
       return true;
     } catch (err: any) {
-      console.error('Failed to save to localStorage:', err);
+      console.error('Failed to save invoice:', err);
       if (!silent) {
-        toast.error('Gagal menyimpan: penyimpanan browser penuh atau terjadi error');
+        toast.error('Gagal menyimpan: ' + (err.message || 'terjadi error'));
         return false;
       }
-      // When called silently (eg. before printing), allow the action to continue
-      // even if saving failed (so users can still print/download PDF).
-      toast.error('Gagal menyimpan ke storage; melanjutkan proses cetak/unduh');
+      toast.error('Gagal menyimpan ke storage; melanjutkan');
       if (id === 'new') nav(`/invoice/${inv.id}`, { replace: true });
       return true;
     }
   };
 
-  const print = () => {
-    if (save(true)) setTimeout(() => window.print(), 100);
+  const print = async () => {
+    if (await save(true)) setTimeout(() => window.print(), 100);
   };
   const share = async () => {
     const t = calcTotals(inv);
@@ -133,9 +178,9 @@ export default function InvoiceEditor() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-4 p-4 lg:p-6">
+    <div className="print-page grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-4 p-4 lg:p-6 w-full">
       {/* Toolbar */}
-      <div className="no-print lg:col-span-2 flex flex-wrap items-center justify-between gap-2 mb-2">
+      <div className="no-print lg:col-span-2 flex flex-wrap items-center justify-between gap-2 mb-2 w-full border-b pb-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => nav('/')}>
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -151,11 +196,7 @@ export default function InvoiceEditor() {
           </Button>
           <Button variant="outline" size="sm" onClick={print}>
             <Printer className="h-4 w-4 mr-1" />
-            Print
-          </Button>
-          <Button variant="outline" size="sm" onClick={print}>
-            <Download className="h-4 w-4 mr-1" />
-            PDF
+            Print / Preview
           </Button>
           <Button size="sm" onClick={() => save()}>
             <Save className="h-4 w-4 mr-1" />
@@ -165,7 +206,7 @@ export default function InvoiceEditor() {
       </div>
 
       {/* Form / Preview tabs on mobile */}
-      <div className="lg:hidden no-print">
+      <div className="lg:hidden no-print w-full col-span-1">
         <Tabs defaultValue="form">
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="form">
@@ -177,7 +218,7 @@ export default function InvoiceEditor() {
               Preview
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="form" className="mt-3">
+          <TabsContent value="form" className="mt-3 w-full">
             <EditorForm
               inv={inv}
               totals={totals}
@@ -191,16 +232,19 @@ export default function InvoiceEditor() {
               addItem={addItem}
               updItem={updItem}
               delItem={delItem}
+              users={users}
+              selectedUserId={selectedUserId}
+              handleCustomerChange={handleCustomerChange}
             />
           </TabsContent>
-          <TabsContent value="preview" className="mt-3">
+          <TabsContent value="preview" className="mt-3 w-full animate-in fade-in duration-300">
             <InvoicePreview invoice={inv} />
           </TabsContent>
         </Tabs>
       </div>
 
       {/* Desktop: form left, preview right */}
-      <div className="hidden lg:block no-print">
+      <div className="hidden lg:block no-print w-full col-span-1">
         <EditorForm
           inv={inv}
           totals={totals}
@@ -214,99 +258,117 @@ export default function InvoiceEditor() {
           addItem={addItem}
           updItem={updItem}
           delItem={delItem}
+          users={users}
+          selectedUserId={selectedUserId}
+          handleCustomerChange={handleCustomerChange}
         />
       </div>
-      <div className="hidden lg:block">
+      <div className="hidden lg:block w-full col-span-1">
         <div className="sticky top-20">
           <InvoicePreview invoice={inv} />
         </div>
       </div>
 
-      {/* Print-only: show preview full */}
-      <div className="print-only">
+      {/* Print-only layout */}
+      <div className="print-only w-full lg:col-span-2">
         <InvoicePreview invoice={inv} />
       </div>
     </div>
   );
 }
 
-function EditorForm(props: any) {
-  const { inv, totals, update, updCustomer, updDevice, updPayment, updCompany, updTpl, updSig, addItem, updItem, delItem } = props;
+function EditorForm({ inv, totals, update, updCustomer, updDevice, updPayment, updCompany, updTpl, updSig, addItem, updItem, delItem, users, selectedUserId, handleCustomerChange }: any) {
   return (
-    <Tabs defaultValue="doc" className="space-y-4">
-      <TabsList className="flex w-full overflow-x-auto">
-        <TabsTrigger value="doc">Dokumen</TabsTrigger>
-        <TabsTrigger value="customer">Customer</TabsTrigger>
+    <Tabs defaultValue="details" className="space-y-4">
+      <TabsList className="grid grid-cols-4 w-full">
+        <TabsTrigger value="details">Pelanggan</TabsTrigger>
         <TabsTrigger value="device">Device</TabsTrigger>
-        <TabsTrigger value="items">Items</TabsTrigger>
-        <TabsTrigger value="payment">Pembayaran</TabsTrigger>
-        <TabsTrigger value="sign">Tanda Tangan</TabsTrigger>
-        <TabsTrigger value="terms">Syarat</TabsTrigger>
-        <TabsTrigger value="company">Perusahaan</TabsTrigger>
-        <TabsTrigger value="template">Template</TabsTrigger>
+        <TabsTrigger value="items">Biaya</TabsTrigger>
+        <TabsTrigger value="signatures">Signature</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="doc">
+      <TabsContent value="details">
         <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Nomor">
-              <Input value={inv.number} onChange={(e) => update({ number: e.target.value })} />
-            </Field>
-            <Field label="Tipe Dokumen">
-              <Select value={inv.documentType} onValueChange={(v) => update({ documentType: v as any })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="service_order">Service Order</SelectItem>
-                  <SelectItem value="invoice">Invoice</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Tanggal">
-              <Input type="date" value={inv.date} onChange={(e) => update({ date: e.target.value })} />
-            </Field>
-            <Field label="Jatuh Tempo">
-              <Input type="date" value={inv.dueDate} onChange={(e) => update({ dueDate: e.target.value })} />
-            </Field>
-            <Field label="Status">
-              <Select value={inv.status} onValueChange={(v) => update({ status: v as any })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="unpaid">Belum Bayar</SelectItem>
-                  <SelectItem value="partial">DP</SelectItem>
-                  <SelectItem value="paid">Lunas</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Catatan Sidebar" className="md:col-span-2">
-              <Textarea rows={2} value={inv.notes} onChange={(e) => update({ notes: e.target.value })} placeholder="Catatan singkat untuk customer (tampil di sidebar)" />
-            </Field>
-          </CardContent>
-        </Card>
-      </TabsContent>
+          <CardContent className="p-4 space-y-4">
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Nomor Dokumen">
+                <Input value={inv.number} onChange={(e) => update({ number: e.target.value })} />
+              </Field>
+              <Field label="Tipe Dokumen">
+                <Select value={inv.documentType} onValueChange={(v: any) => update({ documentType: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="invoice">Invoice</SelectItem>
+                    <SelectItem value="service_order">Service Order</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Tanggal Masuk">
+                <Input type="date" value={inv.date} onChange={(e) => update({ date: e.target.value })} />
+              </Field>
+              <Field label="Estimasi Selesai">
+                <Input type="date" value={inv.dueDate} onChange={(e) => update({ dueDate: e.target.value })} />
+              </Field>
+              <Field label="Status Pembayaran">
+                <Select value={inv.status} onValueChange={(v: any) => update({ status: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="unpaid">Belum Bayar (Unpaid)</SelectItem>
+                    <SelectItem value="partial">Bayar Sebagian (DP)</SelectItem>
+                    <SelectItem value="paid">Lunas (Paid)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
 
-      <TabsContent value="customer">
-        <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Nama *">
-              <Input value={inv.customer.name} onChange={(e) => updCustomer('name', e.target.value)} />
-            </Field>
-            <Field label="Telepon">
-              <Input value={inv.customer.phone} onChange={(e) => updCustomer('phone', e.target.value)} />
-            </Field>
-            <Field label="Email">
-              <Input type="email" value={inv.customer.email} onChange={(e) => updCustomer('email', e.target.value)} />
-            </Field>
-            <Field label="PIN / Lock">
-              <Input value={inv.customer.pin} onChange={(e) => updCustomer('pin', e.target.value)} />
-            </Field>
-            <Field label="Alamat" className="md:col-span-2">
-              <Textarea rows={2} value={inv.customer.address} onChange={(e) => updCustomer('address', e.target.value)} />
-            </Field>
+            <Separator />
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Data Customer</h3>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Pilih Customer Terdaftar</Label>
+                <Select value={selectedUserId} onValueChange={handleCustomerChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih customer..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">+ Tambah Customer Baru</SelectItem>
+                    {users.map((u: any) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name} ({u.phone})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-3 pt-2">
+                <Field label="Nama Lengkap *">
+                  <Input value={inv.customer.name} onChange={(e) => updCustomer('name', e.target.value)} placeholder="Nama lengkap..." />
+                </Field>
+                <Field label="No. Handphone / WhatsApp *">
+                  <Input value={inv.customer.phone} onChange={(e) => updCustomer('phone', e.target.value)} placeholder="08xxxxxxxxxx" />
+                </Field>
+                <Field label="Email">
+                  <Input value={inv.customer.email || ''} onChange={(e) => updCustomer('email', e.target.value)} placeholder="customer@email.com" />
+                </Field>
+                <Field label="PIN Lock / Pola">
+                  <Input value={inv.customer.pin || ''} onChange={(e) => updCustomer('pin', e.target.value)} placeholder="1234 / Pola L" />
+                </Field>
+                <Field label="Alamat Customer" className="md:col-span-2">
+                  <Textarea rows={2} value={inv.customer.address || ''} onChange={(e) => updCustomer('address', e.target.value)} placeholder="Alamat lengkap..." />
+                </Field>
+                <Field label="Catatan Tambahan Pelanggan" className="md:col-span-2">
+                  <Textarea rows={2} value={inv.customer.notes || ''} onChange={(e) => updCustomer('notes', e.target.value)} placeholder="Catatan opsional..." />
+                </Field>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
@@ -314,236 +376,155 @@ function EditorForm(props: any) {
       <TabsContent value="device">
         <Card>
           <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Type / Model *">
-              <Input value={inv.device.type} onChange={(e) => updDevice('type', e.target.value)} placeholder="iPhone 13 Pro" />
+            <Field label="Model / Tipe Device *">
+              <Input value={inv.device.type} onChange={(e) => updDevice('type', e.target.value)} placeholder="iPhone 13, Galaxy S22..." />
             </Field>
-            <Field label="Storage">
-              <Input value={inv.device.storage} onChange={(e) => updDevice('storage', e.target.value)} placeholder="256 GB" />
+            <Field label="Kapasitas Storage">
+              <Input value={inv.device.storage} onChange={(e) => updDevice('storage', e.target.value)} placeholder="128GB, 256GB..." />
             </Field>
-            <Field label="Color">
-              <Input value={inv.device.color} onChange={(e) => updDevice('color', e.target.value)} />
+            <Field label="Warna">
+              <Input value={inv.device.color} onChange={(e) => updDevice('color', e.target.value)} placeholder="Graphite, Sierra Blue..." />
             </Field>
-            <Field label="IMEI / Serial *">
-              <Input value={inv.device.imei} onChange={(e) => updDevice('imei', e.target.value)} />
+            <Field label="IMEI / Serial Number *">
+              <Input value={inv.device.imei} onChange={(e) => updDevice('imei', e.target.value)} placeholder="35xxxxxxxxxxxxx" />
             </Field>
-            <Field label="Status Garansi">
-              <Input value={inv.device.warrantyStatus} onChange={(e) => updDevice('warrantyStatus', e.target.value)} placeholder="Garansi 30 Hari" />
+            <Field label="Keluhan Kerusakan *">
+              <Textarea rows={3} value={inv.device.complaint} onChange={(e) => updDevice('complaint', e.target.value)} placeholder="Layar retak, mati total, baterai kembung..." />
             </Field>
-            <Field label="Keluhan" className="md:col-span-2">
-              <Textarea rows={2} value={inv.device.complaint} onChange={(e) => updDevice('complaint', e.target.value)} />
+            <Field label="Hasil Diagnosa Teknis">
+              <Textarea rows={3} value={inv.device.diagnosis} onChange={(e) => updDevice('diagnosis', e.target.value)} placeholder="LCD pecah perlu diganti..." />
             </Field>
-            <Field label="Diagnosa / Tindakan" className="md:col-span-2">
-              <Textarea rows={2} value={inv.device.diagnosis} onChange={(e) => updDevice('diagnosis', e.target.value)} />
-            </Field>
+            <div className="md:col-span-2">
+              <Field label="Status Garansi Service">
+                <Select value={inv.device.warrantyStatus} onValueChange={(v: any) => updDevice('warrantyStatus', v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Non-Garansi">Non-Garansi</SelectItem>
+                    <SelectItem value="Garansi 7 Hari">Garansi 7 Hari</SelectItem>
+                    <SelectItem value="Garansi 30 Hari">Garansi 30 Hari</SelectItem>
+                    <SelectItem value="Garansi 90 Hari">Garansi 90 Hari</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
 
-      <TabsContent value="items">
+      <TabsContent value="items" className="space-y-4">
         <Card>
-          <CardContent className="p-4 space-y-3">
-            {inv.items.map((it: InvoiceItem, idx: number) => (
-              <div key={it.id} className="rounded-lg border p-3 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-xs font-semibold text-muted-foreground">Item #{idx + 1}</div>
-                  <Button variant="ghost" size="sm" onClick={() => delItem(idx)} className="h-7 text-destructive">
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="grid md:grid-cols-2 gap-2">
-                  <Field label="Nama / Layanan">
-                    <Input value={it.name} onChange={(e) => updItem(idx, { name: e.target.value })} />
-                  </Field>
-                  <Field label="Deskripsi">
-                    <Input value={it.description} onChange={(e) => updItem(idx, { description: e.target.value })} />
-                  </Field>
-                  <Field label="Qty">
-                    <Input type="number" min={0} value={it.qty} onChange={(e) => updItem(idx, { qty: +e.target.value })} />
-                  </Field>
-                  <Field label="Harga Satuan">
-                    <Input type="number" min={0} value={it.unitPrice} onChange={(e) => updItem(idx, { unitPrice: +e.target.value })} />
-                  </Field>
-                  <Field label="Diskon (Rp)">
-                    <Input type="number" min={0} value={it.discount} onChange={(e) => updItem(idx, { discount: +e.target.value })} />
-                  </Field>
-                  <Field label="Pajak (%)">
-                    <Input type="number" min={0} value={it.tax} onChange={(e) => updItem(idx, { tax: +e.target.value })} />
-                  </Field>
-                </div>
-                <div className="text-right text-sm">
-                  Subtotal: <span className="font-semibold">{formatRupiah((it.qty || 0) * (it.unitPrice || 0))}</span>
-                </div>
-              </div>
-            ))}
-            <Button variant="outline" onClick={addItem} className="w-full">
-              <Plus className="h-4 w-4 mr-1" />
-              Tambah Item
-            </Button>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-sm">Daftar Rincian Biaya Service</h3>
+              <Button size="sm" variant="outline" onClick={addItem}>
+                + Tambah Biaya
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {inv.items.map((item, idx) => (
+                <Card key={item.id} className="border-border/60 bg-muted/20">
+                  <CardContent className="p-3 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground">Item Biaya #{idx + 1}</span>
+                      {inv.items.length > 1 && (
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => delItem(idx)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <Field label="Nama Layanan / Part">
+                        <Input value={item.name} onChange={(e) => updItem(idx, { name: e.target.value })} placeholder="Ganti LCD, Jasa Service..." />
+                      </Field>
+                      <Field label="Deskripsi / Keterangan Part">
+                        <Input value={item.description} onChange={(e) => updItem(idx, { description: e.target.value })} placeholder="Kualitas Original/OEM..." />
+                      </Field>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <Field label="Qty">
+                        <Input type="number" min={1} value={item.qty} onChange={(e) => updItem(idx, { qty: parseInt(e.target.value) || 1 })} />
+                      </Field>
+                      <Field label="Harga Satuan (Rp)" className="col-span-2">
+                        <Input type="number" min={0} value={item.unitPrice} onChange={(e) => updItem(idx, { unitPrice: parseInt(e.target.value) || 0 })} />
+                      </Field>
+                      <Field label="Diskon (Rp)">
+                        <Input type="number" min={0} value={item.discount} onChange={(e) => updItem(idx, { discount: parseInt(e.target.value) || 0 })} />
+                      </Field>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
             <Separator />
-            <div className="space-y-1 text-sm">
-              <Row label="Subtotal">{formatRupiah(totals.subtotal)}</Row>
-              <Row label="Diskon">- {formatRupiah(totals.discountTotal)}</Row>
-              <Row label="Pajak">{formatRupiah(totals.taxTotal)}</Row>
-              <Row label="Grand Total" bold>
-                {formatRupiah(totals.grandTotal)}
-              </Row>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
 
-      <TabsContent value="payment">
-        <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Grand Total">
-              <Input readOnly value={formatRupiah(totals.grandTotal)} />
-            </Field>
-            <Field label="Down Payment">
-              <Input type="number" min={0} value={inv.payment.downPayment} onChange={(e) => updPayment('downPayment', +e.target.value)} />
-            </Field>
-            <Field label="Sisa Pembayaran">
-              <Input readOnly value={formatRupiah(totals.remaining)} />
-            </Field>
-            <Field label="Metode Pembayaran">
-              <Input value={inv.payment.method} onChange={(e) => updPayment('method', e.target.value)} />
-            </Field>
-            <Field label="Catatan Pembayaran" className="md:col-span-2">
-              <Textarea rows={2} value={inv.payment.notes} onChange={(e) => updPayment('notes', e.target.value)} />
-            </Field>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="sign">
-        <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="font-semibold text-sm">Customer</div>
-              <SignaturePad value={inv.signatures.customerSignature} onChange={(v) => updSig('customerSignature', v)} />
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="In Date">
-                  <Input type="date" value={inv.signatures.customerInDate || ''} onChange={(e) => updSig('customerInDate', e.target.value)} />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Down Payment (DP / Uang Muka) (Rp)">
+                  <Input type="number" min={0} value={inv.payment.downPayment} onChange={(e) => updPayment('downPayment', parseInt(e.target.value) || 0)} />
                 </Field>
-                <Field label="Out Date">
-                  <Input type="date" value={inv.signatures.customerOutDate || ''} onChange={(e) => updSig('customerOutDate', e.target.value)} />
+                <Field label="Catatan Tambahan Transaksi">
+                  <Input value={inv.notes || ''} onChange={(e) => update({ notes: e.target.value })} placeholder=" ex: Dibawa dengan charger" />
                 </Field>
               </div>
-            </div>
-            <div className="space-y-2">
-              <div className="font-semibold text-sm">Perusahaan</div>
-              <SignaturePad value={inv.signatures.companySignature} onChange={(v) => updSig('companySignature', v)} />
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="In Date">
-                  <Input type="date" value={inv.signatures.companyInDate || ''} onChange={(e) => updSig('companyInDate', e.target.value)} />
-                </Field>
-                <Field label="Out Date">
-                  <Input type="date" value={inv.signatures.companyOutDate || ''} onChange={(e) => updSig('companyOutDate', e.target.value)} />
-                </Field>
+
+              <div className="border-t pt-3 space-y-2 bg-muted/40 rounded-lg p-3">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Subtotal Biaya</span>
+                  <span>{formatRupiah(totals.subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-amber-500">
+                  <span>Diskon Item</span>
+                  <span>-{formatRupiah(totals.discountTotal)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-amber-600">
+                  <span>Uang Muka (DP)</span>
+                  <span>-{formatRupiah(totals.downPayment)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between font-bold text-sm">
+                  <span>Sisa Pembayaran</span>
+                  <span className={totals.remaining > 0 ? 'text-rose-500' : 'text-emerald-500'}>{formatRupiah(totals.remaining)}</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </TabsContent>
 
-      <TabsContent value="terms">
+      <TabsContent value="signatures">
         <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Under Warranty">
-              <Textarea rows={8} value={inv.terms.warranty} onChange={(e) => update({ terms: { ...inv.terms, warranty: e.target.value } })} />
-            </Field>
-            <Field label="General">
-              <Textarea rows={8} value={inv.terms.general} onChange={(e) => update({ terms: { ...inv.terms, general: e.target.value } })} />
-            </Field>
-            <div className="md:col-span-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const c = { ...inv.company, defaultTermsWarranty: inv.terms.warranty, defaultTermsGeneral: inv.terms.general };
-                  updCompany('defaultTermsWarranty', inv.terms.warranty);
-                  updCompany('defaultTermsGeneral', inv.terms.general);
-                  saveCompany(c);
-                  toast.success('Syarat disimpan sebagai preset');
-                }}
-              >
-                Simpan sebagai preset perusahaan
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="company">
-        <Card>
-          <CardContent className="p-4 grid md:grid-cols-2 gap-3">
-            <Field label="Nama Perusahaan">
-              <Input value={inv.company.name} onChange={(e) => updCompany('name', e.target.value)} />
-            </Field>
-            <Field label="Tagline">
-              <Input value={inv.company.tagline || ''} onChange={(e) => updCompany('tagline', e.target.value)} />
-            </Field>
-            <Field label="Email">
-              <Input value={inv.company.email} onChange={(e) => updCompany('email', e.target.value)} />
-            </Field>
-            <Field label="Telepon">
-              <Input value={inv.company.phone} onChange={(e) => updCompany('phone', e.target.value)} />
-            </Field>
-            <Field label="Alamat" className="md:col-span-2">
-              <Textarea rows={2} value={inv.company.address} onChange={(e) => updCompany('address', e.target.value)} />
-            </Field>
-            <Field label="Metode Pembayaran" className="md:col-span-2">
-              <Textarea rows={3} value={inv.company.paymentMethods} onChange={(e) => updCompany('paymentMethods', e.target.value)} />
-            </Field>
-            <ImageUpload label="Logo" value={inv.company.logo} onChange={(v) => updCompany('logo', v)} />
-            <ImageUpload label="QR Pembayaran" value={inv.company.qrImage} onChange={(v) => updCompany('qrImage', v)} />
-            <Field label="Warna Brand">
-              <div className="flex gap-2">
-                <Input
-                  type="color"
-                  value={inv.company.brandColor}
-                  onChange={(e) => {
-                    updCompany('brandColor', e.target.value);
-                    updTpl('brandColor', e.target.value);
-                  }}
-                  className="w-16 h-10 p-1"
-                />
-                <Input
-                  value={inv.company.brandColor}
-                  onChange={(e) => {
-                    updCompany('brandColor', e.target.value);
-                    updTpl('brandColor', e.target.value);
-                  }}
-                />
+          <CardContent className="p-4 space-y-4">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs">Tanda Tangan Pelanggan</Label>
+                <SignaturePad value={inv.signatures.customerSignature} onChange={(v) => updSig('customerSignature', v)} />
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <Field label="Tanggal Masuk (In)">
+                    <Input type="date" value={inv.signatures.customerInDate || ''} onChange={(e) => updSig('customerInDate', e.target.value)} />
+                  </Field>
+                  <Field label="Tanggal Keluar (Out)">
+                    <Input type="date" value={inv.signatures.customerOutDate || ''} onChange={(e) => updSig('customerOutDate', e.target.value)} />
+                  </Field>
+                </div>
               </div>
-            </Field>
-            <div className="md:col-span-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  saveCompany(inv.company);
-                  toast.success('Profil perusahaan tersimpan');
-                }}
-              >
-                Simpan sebagai profil default
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
 
-      <TabsContent value="template">
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <Toggle label="Tampilkan QR Code" checked={inv.templateSettings.showQr} onChange={(v) => updTpl('showQr', v)} />
-            <Toggle label="Tampilkan PIN / Lock" checked={inv.templateSettings.showPin} onChange={(v) => updTpl('showPin', v)} />
-            <Toggle label="Tampilkan Tabel Device" checked={inv.templateSettings.showDeviceTable} onChange={(v) => updTpl('showDeviceTable', v)} />
-            <Field label="Warna Brand Template">
-              <div className="flex gap-2">
-                <Input type="color" value={inv.templateSettings.brandColor} onChange={(e) => updTpl('brandColor', e.target.value)} className="w-16 h-10 p-1" />
-                <Input value={inv.templateSettings.brandColor} onChange={(e) => updTpl('brandColor', e.target.value)} />
+              <div className="space-y-2">
+                <Label className="text-xs">Tanda Tangan Penerima / Toko</Label>
+                <SignaturePad value={inv.signatures.companySignature} onChange={(v) => updSig('companySignature', v)} />
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <Field label="Tanggal Terima (In)">
+                    <Input type="date" value={inv.signatures.companyInDate || ''} onChange={(e) => updSig('companyInDate', e.target.value)} />
+                  </Field>
+                  <Field label="Tanggal Keluar (Out)">
+                    <Input type="date" value={inv.signatures.companyOutDate || ''} onChange={(e) => updSig('companyOutDate', e.target.value)} />
+                  </Field>
+                </div>
               </div>
-            </Field>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
@@ -551,27 +532,11 @@ function EditorForm(props: any) {
   );
 }
 
-function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, children, className = '' }: any) {
   return (
     <div className={`space-y-1 ${className}`}>
       <Label className="text-xs">{label}</Label>
       {children}
-    </div>
-  );
-}
-function Row({ label, children, bold }: any) {
-  return (
-    <div className={`flex justify-between ${bold ? 'font-bold text-base border-t pt-1' : 'text-muted-foreground'}`}>
-      <span>{label}</span>
-      <span>{children}</span>
-    </div>
-  );
-}
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between rounded-md border p-3">
-      <span className="text-sm">{label}</span>
-      <Switch checked={checked} onCheckedChange={onChange} />
     </div>
   );
 }

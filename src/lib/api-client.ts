@@ -1,6 +1,6 @@
 // API Client for communicating with Vercel Serverless Functions
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname) ? 'http://localhost:3000' : '');
 
 export async function apiRequest(endpoint: string, options?: RequestInit) {
   const url = `${API_BASE}/api${endpoint}`;

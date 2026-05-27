@@ -2,11 +2,20 @@ import pg from 'pg';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
-// Load from .env.local (Vercel) or .env (local)
-const envFile = fs.existsSync('.env.local') ? '.env.local' : '.env';
-dotenv.config({ path: envFile });
+// Load .env first, then let .env.local override values when present.
+dotenv.config({ path: '.env' });
+if (fs.existsSync('.env.local')) {
+  dotenv.config({ path: '.env.local', override: true });
+}
 
 const { Client } = pg;
+
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL belum diset.');
+  console.error('   Buat file .env atau .env.local berisi contoh ini:');
+  console.error('   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/circlephone_db');
+  process.exit(1);
+}
 
 const client = new Client({
   connectionString: process.env.DATABASE_URL,
@@ -51,27 +60,30 @@ copy(data); paste to localStorage-export.json file
     console.log(`👤 Migrating ${data.users.length} users...`);
     for (const user of data.users) {
       try {
-        await client.query(`
+        await client.query(
+          `
           INSERT INTO users (id, name, phone, email, address, instagram, notes, total_services, total_purchases, last_visit, created_at, updated_at)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           ON CONFLICT (phone) DO UPDATE SET
             name = COALESCE(EXCLUDED.name, users.name),
             email = COALESCE(EXCLUDED.email, users.email),
             updated_at = CURRENT_TIMESTAMP
-        `, [
-          user.id || generateUUID(),
-          user.name,
-          user.phone,
-          user.email || null,
-          user.address || null,
-          user.instagram || null,
-          user.notes || null,
-          user.totalServices || 0,
-          user.totalPurchases || 0,
-          user.lastVisit || null,
-          user.createdAt || new Date().toISOString(),
-          user.updatedAt || new Date().toISOString(),
-        ]);
+        `,
+          [
+            user.id || generateUUID(),
+            user.name,
+            user.phone,
+            user.email || null,
+            user.address || null,
+            user.instagram || null,
+            user.notes || null,
+            user.totalServices || 0,
+            user.totalPurchases || 0,
+            user.lastVisit || null,
+            user.createdAt || new Date().toISOString(),
+            user.updatedAt || new Date().toISOString(),
+          ],
+        );
       } catch (e) {
         console.log(`   ⚠️  Skipped user ${user.phone}: ${e.message}`);
       }
@@ -88,7 +100,8 @@ copy(data); paste to localStorage-export.json file
         const invId = inv.id || generateUUID();
 
         // Insert invoice
-        await client.query(`
+        await client.query(
+          `
           INSERT INTO circle_pair_invoices (
             id, number, customer_id, customer_name, customer_phone, customer_email, customer_address,
             customer_pin, customer_notes, device_type, device_storage, device_color, device_imei,
@@ -101,25 +114,57 @@ copy(data); paste to localStorage-export.json file
             $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38
           )
           ON CONFLICT (id) DO NOTHING
-        `, [
-          invId, inv.number, userId, inv.customer.name, inv.customer.phone, inv.customer.email || null,
-          inv.customer.address || null, inv.customer.pin || null, inv.customer.notes || null,
-          inv.device.type, inv.device.storage, inv.device.color, inv.device.imei,
-          inv.device.complaint, inv.device.diagnosis, inv.device.warrantyStatus,
-          inv.date, inv.dueDate, inv.status, inv.documentType,
-          0, 0, 0, 0, inv.payment.downPayment, 0,
-          inv.notes, inv.terms.warranty, inv.terms.general,
-          JSON.stringify(inv.templateSettings), inv.company.name, inv.company.email,
-          inv.company.phone, inv.company.address, inv.createdAt, inv.updatedAt,
-        ]);
+        `,
+          [
+            invId,
+            inv.number,
+            userId,
+            inv.customer.name,
+            inv.customer.phone,
+            inv.customer.email || null,
+            inv.customer.address || null,
+            inv.customer.pin || null,
+            inv.customer.notes || null,
+            inv.device.type,
+            inv.device.storage,
+            inv.device.color,
+            inv.device.imei,
+            inv.device.complaint,
+            inv.device.diagnosis,
+            inv.device.warrantyStatus,
+            inv.date,
+            inv.dueDate,
+            inv.status,
+            inv.documentType,
+            0,
+            0,
+            0,
+            0,
+            inv.payment.downPayment,
+            0,
+            inv.notes,
+            inv.terms.warranty,
+            inv.terms.general,
+            JSON.stringify(inv.templateSettings),
+            inv.company.name,
+            inv.company.email,
+            inv.company.phone,
+            inv.company.address,
+            inv.createdAt,
+            inv.updatedAt,
+          ],
+        );
 
         // Insert items
         for (const item of inv.items) {
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO circle_pair_items (id, invoice_id, name, description, qty, unit_price, discount, tax_percent)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT DO NOTHING
-          `, [item.id || generateUUID(), invId, item.name, item.description, item.qty, item.unitPrice, item.discount, item.tax]);
+          `,
+            [item.id || generateUUID(), invId, item.name, item.description, item.qty, item.unitPrice, item.discount, item.tax],
+          );
         }
       } catch (e) {
         console.log(`   ⚠️  Skipped invoice ${inv.number}: ${e.message}`);
@@ -136,7 +181,8 @@ copy(data); paste to localStorage-export.json file
         const userId = await getUserId(inv.customerPhone);
         const invId = inv.id || generateUUID();
 
-        await client.query(`
+        await client.query(
+          `
           INSERT INTO circle_phone_invoices (
             id, number, customer_id, customer_name, customer_phone, customer_email, customer_address,
             customer_instagram, date, due_date, status, subtotal, down_payment, trade_in_value,
@@ -145,33 +191,53 @@ copy(data); paste to localStorage-export.json file
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
           )
           ON CONFLICT (id) DO NOTHING
-        `, [
-          invId, inv.number, userId, inv.customerName, inv.customerPhone, inv.customerEmail || null,
-          inv.customerAddress || null, inv.customerInstagram || null, inv.date, inv.dueDate, inv.status,
-          0, inv.payment.downPayment, inv.payment.tradeInValue, inv.payment.remaining,
-          inv.payment.method, inv.payment.notes, inv.notes, inv.createdAt, inv.updatedAt,
-        ]);
+        `,
+          [
+            invId,
+            inv.number,
+            userId,
+            inv.customerName,
+            inv.customerPhone,
+            inv.customerEmail || null,
+            inv.customerAddress || null,
+            inv.customerInstagram || null,
+            inv.date,
+            inv.dueDate,
+            inv.status,
+            0,
+            inv.payment.downPayment,
+            inv.payment.tradeInValue,
+            inv.payment.remaining,
+            inv.payment.method,
+            inv.payment.notes,
+            inv.notes,
+            inv.createdAt,
+            inv.updatedAt,
+          ],
+        );
 
         // Insert items
         for (const item of inv.items) {
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO circle_phone_items (id, invoice_id, item_type, name, description, qty, unit_price, discount, imei, storage, color, condition)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT DO NOTHING
-          `, [
-            item.id || generateUUID(), invId, item.itemType, item.name, item.description,
-            item.qty, item.unitPrice, item.discount, item.imei || null, item.storage || null,
-            item.color || null, item.condition || null
-          ]);
+          `,
+            [item.id || generateUUID(), invId, item.itemType, item.name, item.description, item.qty, item.unitPrice, item.discount, item.imei || null, item.storage || null, item.color || null, item.condition || null],
+          );
         }
 
         // Insert trade-in
         if (inv.tradeIn && inv.tradeIn.model) {
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO circle_phone_trade_ins (invoice_id, model, storage, color, imei, condition, estimated_price, notes)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT DO NOTHING
-          `, [invId, inv.tradeIn.model, inv.tradeIn.storage, inv.tradeIn.color, inv.tradeIn.imei, inv.tradeIn.condition, inv.tradeIn.estimatedPrice, inv.tradeIn.notes]);
+          `,
+            [invId, inv.tradeIn.model, inv.tradeIn.storage, inv.tradeIn.color, inv.tradeIn.imei, inv.tradeIn.condition, inv.tradeIn.estimatedPrice, inv.tradeIn.notes],
+          );
         }
       } catch (e) {
         console.log(`   ⚠️  Skipped invoice ${inv.number}: ${e.message}`);
@@ -190,9 +256,9 @@ async function getUserId(phone) {
 }
 
 function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c == 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }

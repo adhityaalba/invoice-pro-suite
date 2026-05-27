@@ -1,9 +1,7 @@
 // API Route: /api/circle-pair
 // Vercel Serverless Function for Circle Pair (Service) invoices
 
-import { neon } from '@neondatabase/serverless';
-
-const sql = neon(process.env.DATABASE_URL!);
+import { sql } from '../db-client.ts';
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
@@ -42,11 +40,14 @@ export default async function handler(req: Request) {
           SELECT * FROM circle_pair_signatures WHERE invoice_id = ${id}
         `;
 
-        return Response.json({
-          ...invoice[0],
-          items,
-          signatures: signatures[0] || {},
-        }, { headers: corsHeaders });
+        return Response.json(
+          {
+            ...invoice[0],
+            items,
+            signatures: signatures[0] || {},
+          },
+          { headers: corsHeaders },
+        );
       }
 
       const invoices = await sql`

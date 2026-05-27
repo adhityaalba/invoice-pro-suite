@@ -2,11 +2,21 @@ import pg from 'pg';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
-// Load from .env.local (Vercel) or .env (local)
-const envFile = fs.existsSync('.env.local') ? '.env.local' : '.env';
-dotenv.config({ path: envFile });
+// Load .env first, then let .env.local override values when present.
+dotenv.config({ path: '.env' });
+if (fs.existsSync('.env.local')) {
+  dotenv.config({ path: '.env.local', override: true });
+  console.log('📁 Loading DATABASE_URL from .env + .env.local');
+} else {
+  console.log('📁 Loading DATABASE_URL from .env');
+}
 
-console.log(`📁 Loading DATABASE_URL from ${envFile}`);
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL belum diset.');
+  console.error('   Buat file .env atau .env.local berisi contoh ini:');
+  console.error('   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/circlephone_db');
+  process.exit(1);
+}
 
 const { Client } = pg;
 

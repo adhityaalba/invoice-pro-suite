@@ -76,42 +76,111 @@
 }
 
 @layer base {
-  * { @apply border-border; }
+  * {
+    @apply border-border;
+  }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "cv11", "ss01";
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      sans-serif;
   }
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
     letter-spacing: -0.01em;
   }
 }
 
 @layer utilities {
-  .doc-surface { background: hsl(var(--doc-bg)); color: hsl(var(--doc-foreground)); }
-  .doc-card { background: hsl(var(--doc-surface)); border: 1px solid hsl(var(--doc-border)); }
-  .doc-card-2 { background: hsl(var(--doc-surface-2)); border: 1px solid hsl(var(--doc-border)); }
-  .doc-muted { color: hsl(var(--doc-muted)); }
-  .doc-accent { color: hsl(var(--doc-accent)); }
-  .doc-divider { border-color: hsl(var(--doc-border)); }
+  .doc-surface {
+    background: hsl(var(--doc-bg));
+    color: hsl(var(--doc-foreground));
+  }
+  .doc-card {
+    background: hsl(var(--doc-surface));
+    border: 1px solid hsl(var(--doc-border));
+  }
+  .doc-card-2 {
+    background: hsl(var(--doc-surface-2));
+    border: 1px solid hsl(var(--doc-border));
+  }
+  .doc-muted {
+    color: hsl(var(--doc-muted));
+  }
+  .doc-accent {
+    color: hsl(var(--doc-accent));
+  }
+  .doc-divider {
+    border-color: hsl(var(--doc-border));
+  }
 
-  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
 }
 
 /* Print styles for A4 PDF */
 @media print {
-  @page { size: A4; margin: 0; }
-  body { background: white !important; }
-  .no-print { display: none !important; }
-  .print-only { display: block !important; }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  html,
+  body,
+  #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    background: white !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-page {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .print-page > :not(.print-only) {
+    display: none !important;
+  }
+  .print-page .print-only {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   .invoice-print-root {
     width: 210mm !important;
     min-height: 297mm !important;
     margin: 0 !important;
     box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
     page-break-after: always;
   }
 }
-.print-only { display: none; }
+.print-only {
+  display: none;
+}
