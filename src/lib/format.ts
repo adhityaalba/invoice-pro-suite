@@ -7,6 +7,16 @@ export const formatRupiah = (n: number) => {
   }).format(n);
 };
 
+export const formatRupiahFull = (n: number) => {
+  if (isNaN(n)) n = 0;
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+};
+
 export const formatDateID = (iso?: string) => {
   if (!iso) return '-';
   try {

@@ -1,43 +1,36 @@
-import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FilePlus2, Search, FileText, Copy, Trash2, Eye, Smartphone, ChevronDown, Package, Users } from "lucide-react";
-import { deleteInvoice, loadInvoices, upsertInvoice } from "@/lib/storage-api";
-import { deletePhoneInvoice, loadPhoneInvoices, upsertPhoneInvoice } from "@/lib/storage-api";
-import { formatDateID, formatRupiah, newId } from "@/lib/format";
-import { calcTotals } from "@/lib/calc";
-import { toast } from "sonner";
-import type { Invoice } from "@/types/invoice";
-import type { CirclePhoneInvoice } from "@/types/circle-phone";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
-} from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useMemo, useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FilePlus2, Search, FileText, Copy, Trash2, Eye, Smartphone, ChevronDown, Package, Users, X } from 'lucide-react';
+import { deleteInvoice, loadInvoices, upsertInvoice } from '@/lib/storage-api';
+import { deletePhoneInvoice, loadPhoneInvoices, upsertPhoneInvoice } from '@/lib/storage-api';
+import { formatDateID, formatRupiah, formatRupiahFull, newId } from '@/lib/format';
+import { calcTotals } from '@/lib/calc';
+import { toast } from 'sonner';
+import type { Invoice } from '@/types/invoice';
+import type { CirclePhoneInvoice } from '@/types/circle-phone';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const statusColor: Record<string, string> = {
-  paid: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  unpaid: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
-  partial: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  draft: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
-  reserved: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
-  delivered: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+  paid: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  unpaid: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  partial: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
+  draft: 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30',
+  reserved: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  delivered: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
 };
 
 export default function Dashboard() {
   const nav = useNavigate();
-  const [activeTab, setActiveTab] = useState("pair");
-  const [qPair, setQPair] = useState("");
-  const [qPhone, setQPhone] = useState("");
+  const [activeTab, setActiveTab] = useState('pair');
+  const [qPair, setQPair] = useState('');
+  const [qPhone, setQPhone] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [pairList, setPairList] = useState<Invoice[]>([]);
@@ -45,46 +38,40 @@ export default function Dashboard() {
 
   // Load data from API on mount
   useEffect(() => {
-    Promise.all([
-      loadInvoices().then(setPairList),
-      loadPhoneInvoices().then(setPhoneList),
-    ]).finally(() => setLoading(false));
+    Promise.all([loadInvoices().then(setPairList), loadPhoneInvoices().then(setPhoneList)]).finally(() => setLoading(false));
   }, []);
+
+  const pairByMonth = useMemo(() => {
+    if (!monthFilter) return pairList;
+    return pairList.filter((i) => i.date?.startsWith(monthFilter));
+  }, [monthFilter, pairList]);
+
+  const phoneByMonth = useMemo(() => {
+    if (!monthFilter) return phoneList;
+    return phoneList.filter((i) => i.date?.startsWith(monthFilter));
+  }, [monthFilter, phoneList]);
 
   const filteredPair = useMemo(() => {
     const s = qPair.trim().toLowerCase();
     if (!s) return pairList;
-    return pairList.filter(
-      (i) =>
-        i.number.toLowerCase().includes(s) ||
-        i.customer.name.toLowerCase().includes(s) ||
-        i.device.imei.toLowerCase().includes(s) ||
-        i.status.toLowerCase().includes(s) ||
-        i.date.includes(s)
-    );
-  }, [qPair, pairList]);
+    return pairByMonth.filter((i) => i.number.toLowerCase().includes(s) || i.customer.name.toLowerCase().includes(s) || i.device.imei.toLowerCase().includes(s) || i.status.toLowerCase().includes(s) || i.date.includes(s));
+  }, [qPair, pairByMonth]);
 
   const filteredPhone = useMemo(() => {
     const s = qPhone.trim().toLowerCase();
     if (!s) return phoneList;
-    return phoneList.filter(
-      (i) =>
-        i.number.toLowerCase().includes(s) ||
-        i.customerName.toLowerCase().includes(s) ||
-        i.deviceImei.toLowerCase().includes(s) ||
-        i.status.toLowerCase().includes(s) ||
-        i.date.includes(s) ||
-        (i.tradeIn?.imei?.includes(s) ?? false)
+    return phoneByMonth.filter(
+      (i) => i.number.toLowerCase().includes(s) || i.customerName.toLowerCase().includes(s) || i.deviceImei.toLowerCase().includes(s) || i.status.toLowerCase().includes(s) || i.date.includes(s) || (i.tradeIn?.imei?.includes(s) ?? false),
     );
-  }, [qPhone, phoneList]);
+  }, [qPhone, phoneByMonth]);
 
   const onDeletePair = async (id: string) => {
     try {
       const next = await deleteInvoice(id);
       setPairList(next);
-      toast.success("Invoice Circle Pair dihapus");
+      toast.success('Invoice Circle Pair dihapus');
     } catch (error) {
-      toast.error("Gagal menghapus invoice");
+      toast.error('Gagal menghapus invoice');
     }
   };
 
@@ -92,9 +79,9 @@ export default function Dashboard() {
     try {
       const next = await deletePhoneInvoice(id);
       setPhoneList(next);
-      toast.success("Invoice Circle Phone dihapus");
+      toast.success('Invoice Circle Phone dihapus');
     } catch (error) {
-      toast.error("Gagal menghapus invoice");
+      toast.error('Gagal menghapus invoice');
     }
   };
 
@@ -102,13 +89,13 @@ export default function Dashboard() {
     try {
       const orig = pairList.find((x) => x.id === id);
       if (!orig) return;
-      const copy = { ...orig, id: newId(), number: orig.number + "-COPY", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const copy = { ...orig, id: newId(), number: orig.number + '-COPY', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       const next = await upsertInvoice(copy);
       setPairList(next);
-      toast.success("Invoice diduplikasi");
+      toast.success('Invoice diduplikasi');
       nav(`/invoice/${copy.id}`);
     } catch (error) {
-      toast.error("Gagal menduplikasi invoice");
+      toast.error('Gagal menduplikasi invoice');
     }
   };
 
@@ -116,21 +103,25 @@ export default function Dashboard() {
     try {
       const orig = phoneList.find((x) => x.id === id);
       if (!orig) return;
-      const copy = { ...orig, id: newId(), number: orig.number + "-COPY", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const copy = { ...orig, id: newId(), number: orig.number + '-COPY', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       const next = await upsertPhoneInvoice(copy);
       setPhoneList(next);
-      toast.success("Invoice diduplikasi");
+      toast.success('Invoice diduplikasi');
       nav(`/phone/${copy.id}`);
     } catch (error) {
-      toast.error("Gagal menduplikasi invoice");
+      toast.error('Gagal menduplikasi invoice');
     }
   };
 
-  const totalPairSales = useMemo(() => pairList.reduce((sum, inv) => sum + calcTotals(inv).grandTotal, 0), [pairList]);
-  const totalPhoneSales = useMemo(() => phoneList.reduce((sum, inv) => {
-    const total = inv.items.reduce((itemSum, item) => itemSum + (item.qty * item.unitPrice - item.discount), 0);
-    return sum + total;
-  }, 0), [phoneList]);
+  const totalPairSales = useMemo(() => pairByMonth.reduce((sum, inv) => sum + calcTotals(inv).grandTotal, 0), [pairByMonth]);
+  const totalPhoneSales = useMemo(
+    () =>
+      phoneByMonth.reduce((sum, inv) => {
+        const total = inv.items.reduce((itemSum, item) => itemSum + (item.qty * item.unitPrice - item.discount), 0);
+        return sum + total;
+      }, 0),
+    [phoneByMonth],
+  );
 
   return (
     <div className="space-y-6">
@@ -164,8 +155,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Circle Pair" value={pairList.length} icon={<Smartphone className="h-4 w-4" />} tone="orange" />
         <StatCard label="Circle Phone" value={phoneList.length} icon={<Package className="h-4 w-4" />} tone="blue" />
-        <StatCard label="Total Pair" value={`Rp${(totalPairSales / 1000000).toFixed(1)}jt`} tone="orange" />
-        <StatCard label="Total Phone" value={`Rp${(totalPhoneSales / 1000000).toFixed(1)}jt`} tone="blue" />
+        <StatCard label="Total Pair" value={formatRupiahFull(totalPairSales)} tone="orange" />
+        <StatCard label="Total Phone" value={formatRupiahFull(totalPhoneSales)} tone="blue" />
       </div>
 
       {/* Tabs */}
@@ -179,16 +170,21 @@ export default function Dashboard() {
           </TabsTrigger>
         </TabsList>
 
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
+          <div className="text-sm text-muted-foreground">Filter bulan berlaku ke daftar dan total card.</div>
+          <div className="flex items-center gap-2">
+            <Input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="w-full sm:w-52" />
+            <Button type="button" variant="ghost" size="icon" onClick={() => setMonthFilter('')} disabled={!monthFilter} aria-label="Hapus filter bulan">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
         {/* Circle Pair Tab */}
         <TabsContent value="pair" className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari nomor, nama customer, IMEI, tanggal, status…"
-              value={qPair}
-              onChange={(e) => setQPair(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Cari nomor, nama customer, IMEI, tanggal, status…" value={qPair} onChange={(e) => setQPair(e.target.value)} className="pl-9" />
           </div>
 
           {filteredPair.length === 0 ? (
@@ -214,16 +210,16 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-bold">{inv.number}</span>
-                          <Badge variant="outline" className={statusColor[inv.status]}>{labelStatus(inv.status)}</Badge>
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">
-                            {inv.documentType === "invoice" ? "Invoice" : "Service Order"}
-                          </span>
+                          <Badge variant="outline" className={statusColor[inv.status]}>
+                            {labelStatus(inv.status)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">{inv.documentType === 'invoice' ? 'Invoice' : 'Service Order'}</span>
                         </div>
                         <div className="mt-1 text-sm">
-                          <span className="font-medium">{inv.customer.name || "—"}</span>
+                          <span className="font-medium">{inv.customer.name || '—'}</span>
                           <span className="text-muted-foreground"> · </span>
-                          <span className="text-muted-foreground flex items-center gap-1 inline-flex">
-                            <Smartphone className="h-3 w-3" /> {inv.device.type || "—"} {inv.device.imei && `(${inv.device.imei.slice(-6)})`}
+                          <span className="text-muted-foreground inline-flex items-center gap-1">
+                            <Smartphone className="h-3 w-3" /> {inv.device.type || '—'} {inv.device.imei && `(${inv.device.imei.slice(-6)})`}
                           </span>
                         </div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
@@ -232,15 +228,18 @@ export default function Dashboard() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="secondary" size="sm" onClick={() => nav(`/invoice/${inv.id}`)}>
-                          <Eye className="h-3 w-3 mr-1" />Buka
+                          <Eye className="h-3 w-3 mr-1" />
+                          Buka
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => onDuplicatePair(inv.id)}>
-                          <Copy className="h-3 w-3 mr-1" />Duplikat
+                          <Copy className="h-3 w-3 mr-1" />
+                          Duplikat
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                              <Trash2 className="h-3 w-3 mr-1" />Hapus
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Hapus
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -267,12 +266,7 @@ export default function Dashboard() {
         <TabsContent value="phone" className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari nomor, nama customer, IMEI device, IMEI trade-in, tanggal, status…"
-              value={qPhone}
-              onChange={(e) => setQPhone(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Cari nomor, nama customer, IMEI device, IMEI trade-in, tanggal, status…" value={qPhone} onChange={(e) => setQPhone(e.target.value)} className="pl-9" />
           </div>
 
           {filteredPhone.length === 0 ? (
@@ -299,7 +293,9 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-bold">{inv.number}</span>
-                          <Badge variant="outline" className={statusColor[inv.status]}>{labelSalesStatus(inv.status)}</Badge>
+                          <Badge variant="outline" className={statusColor[inv.status]}>
+                            {labelSalesStatus(inv.status)}
+                          </Badge>
                           {inv.tradeIn && inv.tradeIn.model && (
                             <Badge variant="outline" className="bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30">
                               Trade-In: {inv.tradeIn.model}
@@ -307,9 +303,9 @@ export default function Dashboard() {
                           )}
                         </div>
                         <div className="mt-1 text-sm">
-                          <span className="font-medium">{inv.customerName || "—"}</span>
+                          <span className="font-medium">{inv.customerName || '—'}</span>
                           <span className="text-muted-foreground"> · </span>
-                          <span className="text-muted-foreground flex items-center gap-1 inline-flex">
+                          <span className="text-muted-foreground inline-flex items-center gap-1">
                             <Package className="h-3 w-3" /> {inv.deviceModel} {inv.deviceImei && `(${inv.deviceImei.slice(-6)})`}
                           </span>
                         </div>
@@ -319,15 +315,18 @@ export default function Dashboard() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="secondary" size="sm" onClick={() => nav(`/phone/${inv.id}`)}>
-                          <Eye className="h-3 w-3 mr-1" />Buka
+                          <Eye className="h-3 w-3 mr-1" />
+                          Buka
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => onDuplicatePhone(inv.id)}>
-                          <Copy className="h-3 w-3 mr-1" />Duplikat
+                          <Copy className="h-3 w-3 mr-1" />
+                          Duplikat
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                              <Trash2 className="h-3 w-3 mr-1" />Hapus
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Hapus
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -355,30 +354,44 @@ export default function Dashboard() {
 }
 
 function labelStatus(s: string) {
-  return { paid: "Lunas", unpaid: "Belum Bayar", partial: "DP", draft: "Draft" }[s] || s;
+  return { paid: 'Lunas', unpaid: 'Belum Bayar', partial: 'DP', draft: 'Draft' }[s] || s;
 }
 
 function labelSalesStatus(s: string) {
-  return {
-    paid: "Lunas",
-    unpaid: "Belum Bayar",
-    partial: "DP",
-    draft: "Draft",
-    reserved: "Reserved",
-    delivered: "Delivered"
-  }[s] || s;
+  return (
+    {
+      paid: 'Lunas',
+      unpaid: 'Belum Bayar',
+      partial: 'DP',
+      draft: 'Draft',
+      reserved: 'Reserved',
+      delivered: 'Delivered',
+    }[s] || s
+  );
 }
 
 function StatCard({ label, value, tone, icon }: { label: string; value: number | string; tone?: string; icon?: React.ReactNode }) {
-  const cls = tone === "orange" ? "text-orange-600 dark:text-orange-400" :
-              tone === "blue" ? "text-blue-600 dark:text-blue-400" :
-              tone === "emerald" ? "text-emerald-600 dark:text-emerald-400" :
-              tone === "amber" ? "text-amber-600 dark:text-amber-400" :
-              tone === "rose" ? "text-rose-600 dark:text-rose-400" : "";
+  const cls =
+    tone === 'orange'
+      ? 'text-orange-600 dark:text-orange-400'
+      : tone === 'blue'
+        ? 'text-blue-600 dark:text-blue-400'
+        : tone === 'emerald'
+          ? 'text-emerald-600 dark:text-emerald-400'
+          : tone === 'amber'
+            ? 'text-amber-600 dark:text-amber-400'
+            : tone === 'rose'
+              ? 'text-rose-600 dark:text-rose-400'
+              : '';
   return (
-    <Card><CardContent className="p-4">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">{label}{icon}</div>
-      <div className={`text-2xl font-bold mt-1 ${cls}`}>{value}</div>
-    </CardContent></Card>
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          {label}
+          {icon}
+        </div>
+        <div className={`text-2xl font-bold mt-1 ${cls}`}>{value}</div>
+      </CardContent>
+    </Card>
   );
 }

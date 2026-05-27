@@ -1,127 +1,146 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Guidance for agents working in this repository. Keep changes focused, verify with build/lint after edits, and prefer the smallest fix that restores the intended behavior.
 
-## Development Commands
+## At a Glance
 
-- `npm run dev` - Start development server (runs on port 8081)
-- `npm run build` - Build for production
-- `npm run build:dev` - Build for development mode
-- `npm run lint` - Run ESLint
-- `npm run test` - Run Vitest tests once
-- `npm run test:watch` - Run Vitest in watch mode
+This is a React 18 + TypeScript + Vite application for Circle Pair and Circle Phone service/sales workflows. The UI is local-state-driven, while persistence now lives in PostgreSQL via Vercel Edge API routes and Neon.
 
-## Tech Stack & Architecture
+## How The App Runs
 
-This is a **gadget service invoice management system** built as a single-page React application with localStorage persistence.
+### Local Development
 
-### Core Technologies
+Use Node 24.
 
-- **Frontend**: React 18 + TypeScript + Vite (with SWC for fast compilation)
-- **UI Library**: shadcn/ui (Radix UI primitives + Tailwind CSS)
-- **Routing**: React Router v6
-- **State Management**: TanStack Query (React Query) for server-state-like caching of localStorage data
-- **Testing**: Vitest + jsdom + Testing Library
-- **Build Tool**: Vite (with custom port 8080, HMR overlay disabled)
-
-### Key Architectural Patterns
-
-**Domain Model** (`src/types/invoice.ts`)
-
-- Core entity is `Invoice` with nested objects: `Customer`, `Device`, `InvoiceItem[]`, `Payment`, `Signatures`, `CompanyProfile`, `TemplateSettings`
-- Supports both invoices and service orders (`documentType`)
-- Indonesian default terms and formatting
-
-**Persistence Layer** (`src/lib/storage.ts`)
-
-- All data stored in localStorage with versioned keys (`cp_invoices_v1`, `cp_company_v1`)
-- Automatic seeding on first load with demo invoice
-- CRUD operations: `loadInvoices`, `saveInvoices`, `upsertInvoice`, `deleteInvoice`, `getInvoice`
-- Company profile stored separately and merged with defaults
-
-**Calculation Logic** (`src/lib/calc.ts`)
-
-- `itemSubtotal()` - Per-item calc with qty × price - discount + tax
-- `calcTotals()` - Invoice-level totals (subtotal, discount, tax, grand total, down payment, remaining)
-- Tax is applied **after** line-item discounts
-
-**Formatting** (`src/lib/format.ts`)
-
-- `formatRupiah()` - Indonesian currency formatting
-- `formatDateID()` - Indonesian date formatting
-- `newId()` - UUID generation
-- `todayISO()` - Current date as ISO string
-
-**Invoice Seeding** (`src/lib/seed.ts`)
-
-- `blankInvoice()` - Creates new invoice with pre-populated defaults
-- `newInvoiceNumber()` - Generates invoice numbers like `CP-20260518-123`
-- `seedInvoice()` - Demo data for first-run experience
-
-### Application Structure
-
-**Routing** (`src/App.tsx`)
-
-- `<AppLayout>` wrapper for authenticated-like layout
-- Routes: `/` (Dashboard), `/invoice/new`, `/invoice/:id` (InvoiceEditor), `/settings`
-- Dark theme forced by default
-- QueryClient wraps app with TanStack Query
-
-**Pages**
-
-- `Dashboard` - Invoice list with search, filters, status badges
-- `InvoiceEditor` - Multi-tab form (Details, Items, Payment, Preview)
-- `Settings` - Company profile management
-- `NotFound` - 404 page
-
-**Components**
-
-- `InvoicePreview` - Printable invoice template with custom layout
-- `SignaturePad` - Canvas-based signature capture (dataURL storage)
-- `ImageUpload` - Logo/QR code upload (dataURL storage)
-- `AppLayout` - Navigation layout
-- `/components/ui/` - shadcn/ui components (do not modify manually, use `npx shadcn-ui@latest add`)
-
-### State Management Pattern
-
-Pages use React state with localStorage synchronization:
-
-```tsx
-const [list, setList] = useState(() => loadInvoices());
-const onUpdate = (data) => {
-  const next = upsertInvoice(data); // saves to localStorage
-  setList(next); // updates local state
-};
+```bash
+nvm use v24
+npm run dev
 ```
 
-### Styling & Theming
+`npm run dev` launches two local processes:
 
-- Tailwind CSS with CSS variables for theming (`--doc-bg`, `--doc-surface`, `--doc-foreground`)
-- Invoice templates use print-specific styles (A4 aspect ratio, fixed width)
-- All UI components use shadcn/ui class variance system (`class-variance-authority`)
-- Dark theme is the default and primary theme
+- Vite frontend on `http://localhost:8081`
+- Custom API proxy on `http://localhost:3000`
 
-### Testing
+The proxy server is `scripts/dev-server.ts`. It loads handlers from `api/` and forwards non-API traffic to Vite. During local development, the frontend should point `VITE_API_URL` to `http://localhost:3000`.
 
-- Vitest with jsdom environment
-- Test setup in `src/test/setup.ts` (includes matchMedia polyfill)
-- Tests placed alongside source files: `*.test.ts` or `*.spec.ts`
-- Testing Library for React component testing
+Useful local commands:
 
-## Important Business Logic
+- `npm run dev:frontend` for Vite only
+- `npm run dev:api` for the API proxy only
+- `npm run build` for production bundle validation
+- `npm run lint` for static checks
+- `npm run test` for the Vitest suite
 
-- **Invoice numbering**: Format is `CP-YYYYMMDD-NNN` (company prefix + date + random)
-- **Status flow**: draft → unpaid/partial → paid (but any status can be set manually)
-- **Payment tracking**: `downPayment` + remaining balance calculation
-- **Device IMEI**: Tracked for warranty claims
-- **Signatures**: Four signature/date fields (customer in/out, company in/out)
-- **Default terms**: Indonesian warranty and general terms stored in `DEFAULT_TERMS_*` constants
+### Vercel Deployment
 
-## Development Notes
+`vercel.json` builds with `npm run build`, publishes `dist`, and rewrites `/api/*` to the Edge handlers in `api/`.
 
-- The app uses `@` alias for `./src` directory
-- ESLint is configured with TypeScript, React Hooks, and React Refresh rules
-- `@typescript-eslint/no-unused-vars` is disabled
-- All currency calculations round to integers (no cents/decimal places)
-- Images stored as dataURL in localStorage (warn about storage limits)
-- Dev server runs on port 8080 with HMR (overlay disabled for cleaner output)
+Important Vercel constraints:
+
+- API files under `api/` run as Edge Functions.
+- Do not rely on Node-only modules at the top level of Edge handlers.
+- Use Neon-compatible queries and `sql.query(...)` when you need placeholder parameters.
+- Keep route imports extension-safe for the Vercel TypeScript/Esm build.
+
+Production behavior should be same-origin for the frontend and API. No separate API host is required in Vercel.
+
+## Database Migration
+
+The project uses PostgreSQL, typically Neon in production and optionally local PostgreSQL in development.
+
+Environment files are loaded in this order for migration scripts:
+
+1. `.env`
+2. `.env.local` overrides `.env` when present
+
+Primary migration command:
+
+```bash
+npm run migrate
+```
+
+That script:
+
+- reads `DATABASE_URL`
+- connects with `pg`
+- runs `schema.sql`
+- creates the full database structure for users, Circle Pair, Circle Phone, trade-ins, service history, and company profiles
+
+If you need to migrate exported browser data into PostgreSQL, use:
+
+```bash
+npm run migrate:localstorage
+```
+
+That script expects a `localStorage-export.json` file and moves the exported app data into the database.
+
+Local example connection string:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/circlephone_db
+```
+
+For Neon, set `DATABASE_URL` to the provided Neon connection string in both local env and Vercel environment variables.
+
+## Project Flow
+
+### Main Routes
+
+`src/App.tsx` wires these screens:
+
+- `/` Dashboard
+- `/invoice/new` Circle Pair invoice editor
+- `/invoice/:id` Circle Pair invoice editor for existing records
+- `/phone/new` Circle Phone editor
+- `/phone/:id` Circle Phone editor for existing records
+- `/settings` Company and app settings
+
+### Data Flow
+
+1. The page loads data through `src/lib/storage-api.ts`.
+2. The storage layer maps app models to API payloads and back.
+3. API calls go to `src/lib/api-client.ts`, which chooses the correct base URL.
+4. The API handlers under `api/` read and write PostgreSQL.
+5. The UI updates after mutations by reloading the relevant collection.
+
+### Domain Split
+
+- Circle Pair covers service invoices, items, signatures, and service history.
+- Circle Phone covers sales invoices and trade-in data.
+- Users are shared across both flows and are used for customer lookup/stats.
+
+### Business Rules To Preserve
+
+- Invoice numbers use the project-specific formatted sequence.
+- Totals are rounded to integers.
+- Tax is applied after discounts.
+- Trade-in data must be persisted and rehydrated for Circle Phone.
+- Signatures and warranty notes must survive save/reload.
+- Print and preview output should remain invoice-focused.
+
+## Code Areas To Touch Carefully
+
+- `src/lib/storage-api.ts` for persistence mapping
+- `src/lib/api-client.ts` for API base URL behavior
+- `api/*.ts` for Vercel Edge handlers
+- `src/components/InvoicePreview.tsx` for printable output
+- `src/pages/PhoneEditor.tsx` and `src/pages/InvoiceEditor.tsx` for form behavior
+- `schema.sql` and migration scripts for database structure
+
+## Testing And Validation
+
+After any non-trivial change, validate with:
+
+```bash
+npm run build
+```
+
+If the change touches API or persistence logic, also validate the relevant workflow in the browser or against the local API proxy.
+
+## Existing Conventions
+
+- Use `@` as the alias for `./src`
+- Preserve shadcn/ui components under `src/components/ui/`
+- Avoid rewriting unrelated code or formatting large files unnecessarily
+- Prefer data mapping fixes over UI workarounds when persistence breaks
