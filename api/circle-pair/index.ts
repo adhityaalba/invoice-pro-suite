@@ -1,7 +1,7 @@
 // API Route: /api/circle-pair
 // Vercel Serverless Function for Circle Pair (Service) invoices
 
-import { sql } from '../db-client.js';
+import { sql } from '../db-client.ts';
 
 function buildUpdateStatement(updates: Record<string, any>, id: string) {
   const entries = Object.entries(updates);
