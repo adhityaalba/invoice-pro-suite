@@ -14,7 +14,7 @@ export default function InvoicePreview({ invoice }: Props) {
   const brand = invoice.templateSettings.brandColor || invoice.company.brandColor;
   const headerColor = '#2A313B';
   const logoSrc = '/LOGO CIRCLE PAIR.png';
-  const invoiceQrUrl = `https://adhityaalba.com/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
+  const invoiceQrUrl = invoice.companyType === 'circle-phone' ? 'https://circlephones.id/' : `https://adhityaalba.com/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
   const ts = invoice.templateSettings;
   const c = invoice.company;
   const showQr = ts.showQr && c.qrImage;

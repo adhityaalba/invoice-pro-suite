@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FilePlus2, Search, FileText, Copy, Trash2, Eye, Smartphone, ChevronDown, Package, Users, X } from 'lucide-react';
 import { deleteInvoice, loadInvoices, upsertInvoice } from '@/lib/storage-api';
 import { deletePhoneInvoice, loadPhoneInvoices, upsertPhoneInvoice } from '@/lib/storage-api';
@@ -25,12 +26,40 @@ const statusColor: Record<string, string> = {
   delivered: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
 };
 
+const monthOptions = [
+  { value: '01', label: 'Jan' },
+  { value: '02', label: 'Feb' },
+  { value: '03', label: 'Mar' },
+  { value: '04', label: 'Apr' },
+  { value: '05', label: 'Mei' },
+  { value: '06', label: 'Jun' },
+  { value: '07', label: 'Jul' },
+  { value: '08', label: 'Agt' },
+  { value: '09', label: 'Sep' },
+  { value: '10', label: 'Okt' },
+  { value: '11', label: 'Nov' },
+  { value: '12', label: 'Des' },
+];
+
+const yearOptions = Array.from({ length: 11 }, (_, index) => String(2026 + index));
+
+function matchesDateFilter(date: string | undefined, monthFilter: string, yearFilter: string) {
+  if (!date) return false;
+  if (!monthFilter && !yearFilter) return true;
+
+  const [year, month] = date.split('-');
+  if (yearFilter && year !== yearFilter) return false;
+  if (monthFilter && month !== monthFilter) return false;
+  return true;
+}
+
 export default function Dashboard() {
   const nav = useNavigate();
   const [activeTab, setActiveTab] = useState('pair');
   const [qPair, setQPair] = useState('');
   const [qPhone, setQPhone] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [pairList, setPairList] = useState<Invoice[]>([]);
@@ -42,14 +71,12 @@ export default function Dashboard() {
   }, []);
 
   const pairByMonth = useMemo(() => {
-    if (!monthFilter) return pairList;
-    return pairList.filter((i) => i.date?.startsWith(monthFilter));
-  }, [monthFilter, pairList]);
+    return pairList.filter((i) => matchesDateFilter(i.date, monthFilter, yearFilter));
+  }, [monthFilter, pairList, yearFilter]);
 
   const phoneByMonth = useMemo(() => {
-    if (!monthFilter) return phoneList;
-    return phoneList.filter((i) => i.date?.startsWith(monthFilter));
-  }, [monthFilter, phoneList]);
+    return phoneList.filter((i) => matchesDateFilter(i.date, monthFilter, yearFilter));
+  }, [monthFilter, phoneList, yearFilter]);
 
   const filteredPair = useMemo(() => {
     const s = qPair.trim().toLowerCase();
@@ -171,10 +198,47 @@ export default function Dashboard() {
         </TabsList>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
-          <div className="text-sm text-muted-foreground">Filter bulan berlaku ke daftar dan total card.</div>
-          <div className="flex items-center gap-2">
-            <Input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="w-full sm:w-52" />
-            <Button type="button" variant="ghost" size="icon" onClick={() => setMonthFilter('')} disabled={!monthFilter} aria-label="Hapus filter bulan">
+          <div className="text-sm text-muted-foreground">Filter bulan dan tahun berlaku ke daftar dan total card.</div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={monthFilter} onValueChange={(value) => setMonthFilter(value === 'all-months' ? '' : value)}>
+              <SelectTrigger className="w-full sm:w-32">
+                <SelectValue placeholder="Bulan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-months">Semua Bulan</SelectItem>
+                {monthOptions.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={yearFilter} onValueChange={(value) => setYearFilter(value === 'all-years' ? '' : value)}>
+              <SelectTrigger className="w-full sm:w-32">
+                <SelectValue placeholder="Tahun" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-years">Semua Tahun</SelectItem>
+                {yearOptions.map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setMonthFilter('');
+                setYearFilter('');
+              }}
+              disabled={!monthFilter && !yearFilter}
+              aria-label="Hapus filter bulan dan tahun"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>

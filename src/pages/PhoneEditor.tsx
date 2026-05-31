@@ -641,9 +641,9 @@ export default function PhoneEditor() {
                       <SelectItem value="Transfer Bank">Transfer Bank</SelectItem>
                       <SelectItem value="Tunai">Tunai</SelectItem>
                       <SelectItem value="BCA">BCA</SelectItem>
-                      <SelectItem value="DANA">DANA</SelectItem>
-                      <SelectItem value="OVO">OVO</SelectItem>
-                      <SelectItem value="GoPay">GoPay</SelectItem>
+                      <SelectItem value="BRI">BRI</SelectItem>
+                      <SelectItem value="MANDIRI">Mandiri</SelectItem>
+                      <SelectItem value="Credit Card">Credit Card</SelectItem>
                       <SelectItem value="ShopeePay">ShopeePay</SelectItem>
                       <SelectItem value="QRIS">QRIS</SelectItem>
                     </SelectContent>
