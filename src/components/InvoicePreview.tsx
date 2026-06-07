@@ -15,7 +15,7 @@ export default function InvoicePreview({ invoice }: Props) {
   const headerColor = '#2A313B';
   const ts = invoice.templateSettings;
   const c = invoice.company;
-  const logoSrc = c.logo || '/cropped-LOGO-APRIL-2023-NEW-PANJANG.png';
+  const logoSrc = c.logo || '/logocircle.png';
   const invoiceQrUrl = invoice.companyType === 'circle-phone' ? 'https://circlephones.id/' : `https://circlephones.id/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
   const showQr = ts.showQr && c.qrImage;
   const docTheme = {

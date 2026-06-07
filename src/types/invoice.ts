@@ -104,7 +104,7 @@ export const DEFAULT_TERMS_GENERAL = `1. Pengambilan unit wajib membawa nota/inv
 export const DEFAULT_COMPANY: CompanyProfile = {
   name: 'Circle Pair',
   tagline: 'Gadget Service & Repair',
-  logo: '/cropped-LOGO-APRIL-2023-NEW-PANJANG.png',
+  logo: '/logocircle.png',
   email: 'circlepair.id@gmail.com',
   phone: '+62 877-3916-9797',
   address: 'Jl. Kyai Saleh No.1108, Mugassari, Kec. Semarang Sel., Kota Semarang, Jawa Tengah 50244',
@@ -117,7 +117,7 @@ export const DEFAULT_COMPANY: CompanyProfile = {
 export const DEFAULT_COMPANY_CIRCLE_PHONE: CompanyProfile = {
   name: 'Circle Phone',
   tagline: 'Gadget Service & Repair',
-  logo: '/cropped-LOGO-APRIL-2023-NEW-PANJANG.png',
+  logo: '/logocircle.png',
   email: 'circlephone.id@gmail.com',
   phone: '+62 877-3916-9797',
   address: 'Jl. Kyai Saleh No.1108, Mugassari, Kec. Semarang Sel., Kota Semarang, Jawa Tengah 50244',

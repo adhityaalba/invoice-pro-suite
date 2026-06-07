@@ -17,9 +17,7 @@ export default function AppLayout() {
       <header className="no-print sticky top-0 z-30 border-b bg-card/80 backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-4 md:px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Smartphone className="h-4 w-4" />
-            </div>
+            <img src="/logocircle.png" alt="Circle Pair Logo" className="h-8 w-8 object-contain rounded-lg" />
             <div className="leading-tight">
               <div className="text-sm font-bold">Circle Pair</div>
               <div className="text-[10px] text-muted-foreground -mt-0.5">Invoice & Service Order</div>
