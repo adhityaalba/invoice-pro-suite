@@ -46,3 +46,10 @@ export const circlePhoneApi = {
   update: (data: any) => apiRequest('/circle-phone', { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiRequest(`/circle-phone?id=${id}`, { method: 'DELETE' }),
 };
+
+// Guests API
+export const guestsApi = {
+  list: () => apiRequest('/guests'),
+  create: (data: any) => apiRequest('/guests', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id: string) => apiRequest(`/guests?id=${id}`, { method: 'DELETE' }),
+};

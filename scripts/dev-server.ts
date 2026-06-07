@@ -23,7 +23,8 @@ const getHandlers = async () => {
   const circlePair = (await import('../api/circle-pair/index.ts')).default;
   const circlePhone = (await import('../api/circle-phone/index.ts')).default;
   const invoices = (await import('../api/invoices/index.js')).default;
-  return { users, circlePair, circlePhone, invoices };
+  const guests = (await import('../api/guests/index.ts')).default;
+  return { users, circlePair, circlePhone, invoices, guests };
 };
 
 let handlers: any = null;
@@ -168,6 +169,8 @@ const server = http.createServer(async (req, res) => {
     await handleEdgeRoute(handlers.circlePhone, req, res);
   } else if (urlPath === '/api/invoices') {
     await handleNodeRoute(handlers.invoices, req, res);
+  } else if (urlPath === '/api/guests') {
+    await handleEdgeRoute(handlers.guests, req, res);
   } else {
     // Non-API route -> proxy to Vite dev server
     proxyToVite(req, res);

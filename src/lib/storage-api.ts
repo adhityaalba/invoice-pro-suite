@@ -1,7 +1,7 @@
 // Storage layer using PostgreSQL API instead of localStorage
 // This replaces localStorage with database calls
 
-import { usersApi, circlePairApi, circlePhoneApi } from './api-client';
+import { usersApi, circlePairApi, circlePhoneApi, guestsApi } from './api-client';
 import type { Invoice } from '@/types/invoice';
 import type { CirclePhoneInvoice } from '@/types/circle-phone';
 import type { UserProfile } from '@/types/user';
@@ -88,6 +88,58 @@ export async function getUserByPhone(phone: string): Promise<UserProfile | null>
   } catch (error) {
     console.error('Failed to get user by phone:', error);
     return null;
+  }
+}
+
+// ============================================
+// GUESTS (Buku Tamu)
+// ============================================
+
+export interface GuestEntry {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function loadGuests(): Promise<GuestEntry[]> {
+  try {
+    const data = await guestsApi.list();
+    return data.map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      phone: g.phone || '',
+      email: g.email || '',
+      notes: g.notes || '',
+      createdAt: g.created_at,
+      updatedAt: g.updated_at,
+    }));
+  } catch (error) {
+    console.error('Failed to load guests:', error);
+    return [];
+  }
+}
+
+export async function createGuest(data: { name: string; phone?: string; email?: string; notes?: string }): Promise<GuestEntry[]> {
+  try {
+    await guestsApi.create(data);
+    return await loadGuests();
+  } catch (error) {
+    console.error('Failed to create guest:', error);
+    throw error;
+  }
+}
+
+export async function deleteGuest(id: string): Promise<GuestEntry[]> {
+  try {
+    await guestsApi.delete(id);
+    return await loadGuests();
+  } catch (error) {
+    console.error('Failed to delete guest:', error);
+    throw error;
   }
 }
 

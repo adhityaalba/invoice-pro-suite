@@ -1,10 +1,10 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, FilePlus2, Settings, Smartphone } from "lucide-react";
+import { LayoutDashboard, Users, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { to: "/invoice/new", icon: FilePlus2, label: "Buat Invoice" },
+  { to: "/guests", icon: Users, label: "Buku Tamu" },
   { to: "/settings", icon: Settings, label: "Pengaturan" },
 ];
 

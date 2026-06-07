@@ -38,7 +38,7 @@ async function runMigration() {
     console.log('  - users');
     console.log('  - circle_pair_invoices, circle_pair_items, circle_pair_signatures');
     console.log('  - circle_phone_invoices, circle_phone_items, circle_phone_trade_ins');
-    console.log('  - service_history, company_profiles');
+    console.log('  - service_history, company_profiles, guests');
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
     process.exit(1);

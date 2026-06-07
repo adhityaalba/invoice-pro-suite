@@ -257,3 +257,22 @@ CREATE TABLE IF NOT EXISTS company_profiles (
 DROP TRIGGER IF EXISTS update_company_profiles_updated_at ON company_profiles;
 CREATE TRIGGER update_company_profiles_updated_at BEFORE UPDATE ON company_profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- GUESTS TABLE (Buku Tamu)
+-- ============================================
+CREATE TABLE IF NOT EXISTS guests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    email VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests(phone);
+
+DROP TRIGGER IF EXISTS update_guests_updated_at ON guests;
+CREATE TRIGGER update_guests_updated_at BEFORE UPDATE ON guests
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

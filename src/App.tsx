@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import InvoiceEditor from './pages/InvoiceEditor';
 import PhoneEditor from './pages/PhoneEditor';
 import Settings from './pages/Settings';
+import Guests from './pages/Guests';
 import NotFound from './pages/NotFound';
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/phone/new" element={<PhoneEditor />} />
             <Route path="/phone/:id" element={<PhoneEditor />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/guests" element={<Guests />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
