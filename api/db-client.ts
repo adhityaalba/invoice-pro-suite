@@ -27,7 +27,8 @@ async function getSqlClient() {
           }
 
           if (typeof strings === 'string') {
-            const result = await pool.query(strings, values);
+            const queryParams = Array.isArray(values[0]) ? values[0] : values;
+            const result = await pool.query(strings, queryParams);
             return result.rows;
           }
 

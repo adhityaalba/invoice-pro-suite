@@ -16,7 +16,9 @@ export default function InvoicePreview({ invoice }: Props) {
   const ts = invoice.templateSettings;
   const c = invoice.company;
   const logoSrc = c.logo || '/logocircle.png';
-  const invoiceQrUrl = invoice.companyType === 'circle-phone' ? 'https://circlephones.id/' : `https://circlephones.id/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
+  const invoiceQrUrl = (invoice.companyType === 'circle-phone' || invoice.status === 'paid')
+    ? 'https://circlephones.id'
+    : `https://circlephones.id/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
   const showQr = ts.showQr && c.qrImage;
   const docTheme = {
     '--doc-bg': '0 0% 100%',
