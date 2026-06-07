@@ -13,10 +13,10 @@ export default function InvoicePreview({ invoice }: Props) {
   const { grandTotal, downPayment, remaining, subtotal, discountTotal, taxTotal } = calcTotals(invoice);
   const brand = invoice.templateSettings.brandColor || invoice.company.brandColor;
   const headerColor = '#2A313B';
-  const logoSrc = '/LOGO CIRCLE PAIR.png';
-  const invoiceQrUrl = invoice.companyType === 'circle-phone' ? 'https://circlephones.id/' : `https://circlephones.id/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
   const ts = invoice.templateSettings;
   const c = invoice.company;
+  const logoSrc = c.logo || '/cropped-LOGO-APRIL-2023-NEW-PANJANG.png';
+  const invoiceQrUrl = invoice.companyType === 'circle-phone' ? 'https://circlephones.id/' : `https://circlephones.id/rincian-invoice/?invoice=${encodeURIComponent(invoice.id)}`;
   const showQr = ts.showQr && c.qrImage;
   const docTheme = {
     '--doc-bg': '0 0% 100%',

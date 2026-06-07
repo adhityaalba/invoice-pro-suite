@@ -169,6 +169,7 @@ export default function PhoneEditor() {
       company: {
         name: 'Circle Phone',
         tagline: 'Premium Phone & Accessories',
+        logo: '/cropped-LOGO-APRIL-2023-NEW-PANJANG.png',
         email: 'circlephone.id@gmail.com',
         phone: '+62 877-3916-9797',
         address: 'Semarang, Jawa Tengah',
