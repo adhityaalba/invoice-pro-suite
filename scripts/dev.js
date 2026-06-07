@@ -20,7 +20,7 @@ const vite = spawn('npm', ['run', 'dev:frontend'], {
 });
 
 // Start our custom local API & Proxy server on port 3000
-const apiServer = spawn('node', ['scripts/dev-server.ts'], {
+const apiServer = spawn('npx', ['tsx', 'scripts/dev-server.ts'], {
   stdio: 'inherit',
 });
 

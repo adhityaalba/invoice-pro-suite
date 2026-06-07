@@ -1,7 +1,7 @@
 // API Route: /api/circle-phone
 // Vercel Serverless Function for Circle Phone (Sales) invoices
 
-import { sql } from '../db-client.ts';
+import { sql } from '../db-client';
 
 function buildUpdateStatement(updates: Record<string, any>, id: string) {
   const entries = Object.entries(updates);
