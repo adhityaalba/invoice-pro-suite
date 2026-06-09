@@ -6,8 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { UserPlus, Trash2, Calendar, Phone, Mail, FileText, Search, Instagram } from 'lucide-react';
-import { loadGuests, createGuest, deleteGuest, type GuestEntry } from '@/lib/storage-api';
+import { UserPlus, Trash2, Calendar, Phone, Mail, FileText, Search, Instagram, Pencil } from 'lucide-react';
+import { loadGuests, createGuest, updateGuest, deleteGuest, type GuestEntry } from '@/lib/storage-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
@@ -23,6 +23,7 @@ export default function Guests() {
   const [instagram, setInstagram] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Modal state
   const [selectedGuest, setSelectedGuest] = useState<GuestEntry | null>(null);
@@ -39,6 +40,25 @@ export default function Guests() {
       .finally(() => setLoading(false));
   }, []);
 
+  const cancelEdit = () => {
+    setEditingId(null);
+    setName('');
+    setPhone('');
+    setEmail('');
+    setInstagram('');
+    setNotes('');
+  };
+
+  const handleEditClick = (guest: GuestEntry, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(guest.id);
+    setName(guest.name);
+    setPhone(guest.phone ? guest.phone.replace('+62', '') : '');
+    setEmail(guest.email || '');
+    setInstagram(guest.instagram || '');
+    setNotes(guest.notes || '');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -48,22 +68,25 @@ export default function Guests() {
 
     setSubmitting(true);
     try {
-      const updated = await createGuest({
+      const payload = {
         name: name.trim(),
         phone: phone.trim() ? `+62${phone.trim()}` : undefined,
         email: email.trim() || undefined,
         instagram: instagram.trim() || undefined,
         notes: notes.trim() || undefined,
-      });
-      setGuests(updated);
-      toast.success('Berhasil menambahkan catatan tamu!');
+      };
+
+      if (editingId) {
+        const updated = await updateGuest({ id: editingId, ...payload });
+        setGuests(updated);
+        toast.success('Berhasil mengubah catatan tamu!');
+      } else {
+        const updated = await createGuest(payload);
+        setGuests(updated);
+        toast.success('Berhasil menambahkan catatan tamu!');
+      }
       
-      // Reset form
-      setName('');
-      setPhone('');
-      setEmail('');
-      setInstagram('');
-      setNotes('');
+      cancelEdit();
     } catch (err) {
       toast.error('Gagal menyimpan catatan tamu');
     } finally {
@@ -121,7 +144,7 @@ export default function Guests() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <UserPlus className="h-4 w-4 text-primary" />
-              Tambah Pengunjung Baru
+              {editingId ? 'Edit Data Pengunjung' : 'Tambah Pengunjung Baru'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -196,10 +219,17 @@ export default function Guests() {
                 />
               </div>
 
-              <Button type="submit" className="w-full gap-2" disabled={submitting}>
-                <UserPlus className="h-4 w-4" />
-                {submitting ? 'Menyimpan...' : 'Simpan Kunjungan'}
-              </Button>
+              <div className="flex gap-2">
+                {editingId && (
+                  <Button type="button" variant="outline" className="w-full" onClick={cancelEdit} disabled={submitting}>
+                    Batal
+                  </Button>
+                )}
+                <Button type="submit" className="w-full gap-2" disabled={submitting}>
+                  <UserPlus className="h-4 w-4" />
+                  {submitting ? 'Menyimpan...' : (editingId ? 'Simpan Perubahan' : 'Simpan Kunjungan')}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
@@ -259,12 +289,16 @@ export default function Guests() {
                           )}
                         </TableCell>
                         <TableCell className="align-middle text-right" onClick={(e) => e.stopPropagation()}>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/15">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" onClick={(e) => handleEditClick(guest, e)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/15">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Hapus catatan kunjungan?</AlertDialogTitle>
@@ -278,6 +312,7 @@ export default function Guests() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

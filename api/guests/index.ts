@@ -43,6 +43,24 @@ export default async function handler(req: Request) {
       return Response.json(result[0], { headers: corsHeaders, status: 201 });
     }
 
+    // PUT /api/guests - Update guest entry
+    if (method === 'PUT') {
+      const body = await req.json();
+      const { id, name, phone, email, instagram, notes } = body;
+
+      if (!id || !name) {
+        return Response.json({ error: 'ID and Name are required' }, { status: 400, headers: corsHeaders });
+      }
+
+      const result = await sql`
+        UPDATE guests
+        SET name = ${name}, phone = ${phone || null}, email = ${email || null}, instagram = ${instagram || null}, notes = ${notes || null}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      return Response.json(result[0], { headers: corsHeaders });
+    }
+
     // DELETE /api/guests - Delete guest entry
     if (method === 'DELETE') {
       const id = url.searchParams.get('id');

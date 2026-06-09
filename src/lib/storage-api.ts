@@ -135,6 +135,16 @@ export async function createGuest(data: { name: string; phone?: string; email?: 
   }
 }
 
+export async function updateGuest(data: { id: string; name: string; phone?: string; email?: string; instagram?: string; notes?: string }): Promise<GuestEntry[]> {
+  try {
+    await guestsApi.update(data);
+    return await loadGuests();
+  } catch (error) {
+    console.error('Failed to update guest:', error);
+    throw error;
+  }
+}
+
 export async function deleteGuest(id: string): Promise<GuestEntry[]> {
   try {
     await guestsApi.delete(id);
