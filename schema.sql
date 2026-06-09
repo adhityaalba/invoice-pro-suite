@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS guests (
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(50),
     email VARCHAR(255),
+    instagram VARCHAR(100),
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

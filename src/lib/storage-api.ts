@@ -100,6 +100,7 @@ export interface GuestEntry {
   name: string;
   phone: string;
   email: string;
+  instagram: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -113,6 +114,7 @@ export async function loadGuests(): Promise<GuestEntry[]> {
       name: g.name,
       phone: g.phone || '',
       email: g.email || '',
+      instagram: g.instagram || '',
       notes: g.notes || '',
       createdAt: g.created_at,
       updatedAt: g.updated_at,
@@ -123,7 +125,7 @@ export async function loadGuests(): Promise<GuestEntry[]> {
   }
 }
 
-export async function createGuest(data: { name: string; phone?: string; email?: string; notes?: string }): Promise<GuestEntry[]> {
+export async function createGuest(data: { name: string; phone?: string; email?: string; instagram?: string; notes?: string }): Promise<GuestEntry[]> {
   try {
     await guestsApi.create(data);
     return await loadGuests();

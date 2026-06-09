@@ -29,15 +29,15 @@ export default async function handler(req: Request) {
     // POST /api/guests - Create guest entry
     if (method === 'POST') {
       const body = await req.json();
-      const { name, phone, email, notes } = body;
+      const { name, phone, email, instagram, notes } = body;
 
       if (!name) {
         return Response.json({ error: 'Name is required' }, { status: 400, headers: corsHeaders });
       }
 
       const result = await sql`
-        INSERT INTO guests (name, phone, email, notes)
-        VALUES (${name}, ${phone || null}, ${email || null}, ${notes || null})
+        INSERT INTO guests (name, phone, email, instagram, notes)
+        VALUES (${name}, ${phone || null}, ${email || null}, ${instagram || null}, ${notes || null})
         RETURNING *
       `;
       return Response.json(result[0], { headers: corsHeaders, status: 201 });

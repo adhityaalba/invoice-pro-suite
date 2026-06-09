@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { UserPlus, Trash2, Calendar, Phone, Mail, FileText, Search } from 'lucide-react';
+import { UserPlus, Trash2, Calendar, Phone, Mail, FileText, Search, Instagram } from 'lucide-react';
 import { loadGuests, createGuest, deleteGuest, type GuestEntry } from '@/lib/storage-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 export default function Guests() {
   const [guests, setGuests] = useState<GuestEntry[]>([]);
@@ -19,8 +20,12 @@ export default function Guests() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [instagram, setInstagram] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Modal state
+  const [selectedGuest, setSelectedGuest] = useState<GuestEntry | null>(null);
 
   useEffect(() => {
     loadGuests()
@@ -45,8 +50,9 @@ export default function Guests() {
     try {
       const updated = await createGuest({
         name: name.trim(),
-        phone: phone.trim() || undefined,
+        phone: phone.trim() ? `+62${phone.trim()}` : undefined,
         email: email.trim() || undefined,
+        instagram: instagram.trim() || undefined,
         notes: notes.trim() || undefined,
       });
       setGuests(updated);
@@ -56,6 +62,7 @@ export default function Guests() {
       setName('');
       setPhone('');
       setEmail('');
+      setInstagram('');
       setNotes('');
     } catch (err) {
       toast.error('Gagal menyimpan catatan tamu');
@@ -80,6 +87,7 @@ export default function Guests() {
       g.name.toLowerCase().includes(query) ||
       (g.phone && g.phone.includes(query)) ||
       (g.email && g.email.toLowerCase().includes(query)) ||
+      (g.instagram && g.instagram.toLowerCase().includes(query)) ||
       (g.notes && g.notes.toLowerCase().includes(query))
     );
   });
@@ -132,13 +140,25 @@ export default function Guests() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="guest-phone">No. HP / WhatsApp</Label>
-                <Input
-                  id="guest-phone"
-                  placeholder="08xxxxxxxxxx"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  disabled={submitting}
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
+                    +62
+                  </span>
+                  <Input
+                    id="guest-phone"
+                    placeholder="8xxxxxxxxxx"
+                    className="pl-10"
+                    value={phone}
+                    onChange={(e) => {
+                      // Allow digits only, auto remove 0 or 62 or +62 at start if user pastes it
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.startsWith('62')) val = val.substring(2);
+                      if (val.startsWith('0')) val = val.substring(1);
+                      setPhone(val);
+                    }}
+                    disabled={submitting}
+                  />
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -149,6 +169,17 @@ export default function Guests() {
                   placeholder="nama@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="guest-instagram">Instagram</Label>
+                <Input
+                  id="guest-instagram"
+                  placeholder="@username"
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
                   disabled={submitting}
                 />
               </div>
@@ -202,44 +233,32 @@ export default function Guests() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[150px]">Waktu Datang</TableHead>
-                      <TableHead className="w-[180px]">Nama</TableHead>
-                      <TableHead className="w-[200px]">Kontak</TableHead>
-                      <TableHead>Keperluan / Catatan</TableHead>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Instagram</TableHead>
                       <TableHead className="w-[50px] text-right"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredGuests.map((guest) => (
-                      <TableRow key={guest.id}>
-                        <TableCell className="font-medium align-top text-xs">
-                          <span className="flex items-center gap-1.5 text-muted-foreground whitespace-nowrap">
-                            <Calendar className="h-3 w-3 shrink-0" />
-                            {formatDateTime(guest.createdAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-semibold align-top text-sm">
+                      <TableRow 
+                        key={guest.id}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => setSelectedGuest(guest)}
+                      >
+                        <TableCell className="font-semibold align-middle text-sm">
                           {guest.name}
                         </TableCell>
-                        <TableCell className="align-top space-y-1 text-xs">
-                          {guest.phone && (
+                        <TableCell className="align-middle text-xs">
+                          {guest.instagram ? (
                             <span className="flex items-center gap-1.5 text-muted-foreground">
-                              <Phone className="h-3 w-3 shrink-0" />
-                              {guest.phone}
+                              <Instagram className="h-3.5 w-3.5 shrink-0" />
+                              {guest.instagram}
                             </span>
+                          ) : (
+                            <span className="text-slate-500">—</span>
                           )}
-                          {guest.email && (
-                            <span className="flex items-center gap-1.5 text-muted-foreground">
-                              <Mail className="h-3 w-3 shrink-0" />
-                              {guest.email}
-                            </span>
-                          )}
-                          {!guest.phone && !guest.email && <span className="text-slate-500">—</span>}
                         </TableCell>
-                        <TableCell className="align-top text-xs text-muted-foreground whitespace-pre-wrap max-w-xs break-words">
-                          {guest.notes || <span className="italic text-slate-500">tidak ada catatan</span>}
-                        </TableCell>
-                        <TableCell className="align-top text-right">
+                        <TableCell className="align-middle text-right" onClick={(e) => e.stopPropagation()}>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/15">
@@ -269,6 +288,72 @@ export default function Guests() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Detail Modal */}
+      <Dialog open={!!selectedGuest} onOpenChange={(open) => !open && setSelectedGuest(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Detail Tamu</DialogTitle>
+            <DialogDescription>
+              Informasi lengkap tentang kunjungan tamu.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedGuest && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4" /> Waktu
+                </span>
+                <span className="col-span-2 text-sm">{formatDateTime(selectedGuest.createdAt)}</span>
+              </div>
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <UserPlus className="h-4 w-4" /> Nama
+                </span>
+                <span className="col-span-2 text-sm font-semibold">{selectedGuest.name}</span>
+              </div>
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Phone className="h-4 w-4" /> No. HP
+                </span>
+                <span className="col-span-2 text-sm">
+                  {selectedGuest.phone ? (
+                    <a
+                      href={`https://wa.me/+62${selectedGuest.phone.replace(/^(?:\+62|62|0)/, '').replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {selectedGuest.phone.startsWith('+62') ? selectedGuest.phone : `+62${selectedGuest.phone.replace(/^(?:\+62|62|0)/, '')}`}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Mail className="h-4 w-4" /> Email
+                </span>
+                <span className="col-span-2 text-sm">{selectedGuest.email || '—'}</span>
+              </div>
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Instagram className="h-4 w-4" /> Instagram
+                </span>
+                <span className="col-span-2 text-sm">{selectedGuest.instagram || '—'}</span>
+              </div>
+              <div className="grid grid-cols-3 items-start gap-4">
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="h-4 w-4" /> Catatan
+                </span>
+                <span className="col-span-2 text-sm whitespace-pre-wrap">{selectedGuest.notes || '—'}</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

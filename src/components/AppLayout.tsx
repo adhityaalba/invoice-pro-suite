@@ -19,7 +19,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-2">
             <img src="/logocircle.png" alt="Circle Pair Logo" className="h-8 w-8 object-contain rounded-lg" />
             <div className="leading-tight">
-              <div className="text-sm font-bold">Circle Pair</div>
+              <div className="text-sm font-bold">Circle Group</div>
               <div className="text-[10px] text-muted-foreground -mt-0.5">Invoice & Service Order</div>
             </div>
           </div>
