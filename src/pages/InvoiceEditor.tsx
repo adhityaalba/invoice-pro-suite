@@ -21,6 +21,7 @@ import { getCompanyByType, type Invoice, type InvoiceItem } from '@/types/invoic
 import { newId, formatRupiah } from '@/lib/format';
 import { calcTotals } from '@/lib/calc';
 import { toast } from 'sonner';
+import html2pdf from 'html2pdf.js';
 
 export default function InvoiceEditor() {
   const { id } = useParams();
@@ -163,18 +164,70 @@ export default function InvoiceEditor() {
     if (await save(true)) setTimeout(() => window.print(), 100);
   };
   const share = async () => {
-    const t = calcTotals(inv);
-    const text =
-      `*${inv.company.name}* — ${inv.documentType === 'invoice' ? 'Invoice' : 'Service Order'} ${inv.number}\n` +
-      `Customer: ${inv.customer.name}\nDevice: ${inv.device.type} ${inv.device.storage} ${inv.device.color}\nIMEI: ${inv.device.imei}\n` +
-      `Total: ${formatRupiah(t.grandTotal)}\nDP: ${formatRupiah(t.downPayment)}\nSisa: ${formatRupiah(t.remaining)}\nStatus: ${inv.status}`;
+    toast.loading('Menyiapkan PDF...', { id: 'share-pdf' });
+    const element = document.querySelector('.print-only') as HTMLElement;
+    if (!element) {
+      toast.dismiss('share-pdf');
+      return;
+    }
+    
+    const originalDisplay = element.style.display;
+    const originalPosition = element.style.position;
+    const originalLeft = element.style.left;
+    const originalTop = element.style.top;
+    
+    element.style.display = 'block';
+    element.style.position = 'absolute';
+    element.style.left = '-9999px';
+    element.style.top = '0';
+
+    const opt = {
+      margin:       0,
+      filename:     `Invoice-${inv.number}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
     try {
-      if (navigator.share) await navigator.share({ title: inv.number, text });
-      else {
-        await navigator.clipboard.writeText(text);
-        toast.success('Ringkasan disalin');
+      const pdfBlob = await html2pdf().set(opt).from(element.firstElementChild || element).outputPdf('blob');
+      
+      element.style.display = originalDisplay;
+      element.style.position = originalPosition;
+      element.style.left = originalLeft;
+      element.style.top = originalTop;
+
+      toast.dismiss('share-pdf');
+      const file = new File([pdfBlob], `Invoice-${inv.number}.pdf`, { type: 'application/pdf' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `Invoice ${inv.number}`,
+          files: [file]
+        });
+      } else {
+        const t = calcTotals(inv);
+        const text =
+          `*${inv.company.name}* — ${inv.documentType === 'invoice' ? 'Invoice' : 'Service Order'} ${inv.number}\n` +
+          `Customer: ${inv.customer.name}\nDevice: ${inv.device.type} ${inv.device.storage} ${inv.device.color}\nIMEI: ${inv.device.imei}\n` +
+          `Total: ${formatRupiah(t.grandTotal)}\nDP: ${formatRupiah(t.downPayment)}\nSisa: ${formatRupiah(t.remaining)}\nStatus: ${inv.status}`;
+        if (navigator.share) {
+          await navigator.share({ title: inv.number, text });
+        } else {
+          await navigator.clipboard.writeText(text);
+          toast.success('Ringkasan disalin (Share tidak didukung)');
+        }
       }
-    } catch {}
+    } catch (err) {
+      console.error(err);
+      element.style.display = originalDisplay;
+      element.style.position = originalPosition;
+      element.style.left = originalLeft;
+      element.style.top = originalTop;
+
+      toast.dismiss('share-pdf');
+      toast.error('Gagal membuat PDF');
+    }
   };
 
   return (

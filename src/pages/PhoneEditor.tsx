@@ -17,6 +17,7 @@ import type { UserProfile } from '@/types/user';
 import { CONDITION_LABELS, BLANK_SALES_ITEM, BLANK_TRADE_IN, type CirclePhoneInvoice, type SalesItem } from '@/types/circle-phone';
 import { newId, formatRupiah } from '@/lib/format';
 import { toast } from 'sonner';
+import html2pdf from 'html2pdf.js';
 
 export default function PhoneEditor() {
   const { id } = useParams();
@@ -272,28 +273,81 @@ export default function PhoneEditor() {
   };
 
   const handlePrint = async () => {
-    await handleSave(true);
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    const success = await handleSave(true);
+    if (success) {
+      setTimeout(() => {
+        window.print();
+      }, 100);
+    }
   };
 
   const share = async () => {
-    const text =
-      `*Circle Phone* — Invoice ${inv.number}\n` +
-      `Customer: ${inv.customerName}\n` +
-      `Total: ${formatRupiah(totals.total)}\n` +
-      `DP/Tukar Tambah: ${formatRupiah(inv.payment.downPayment + inv.payment.tradeInValue)}\n` +
-      `Sisa: ${formatRupiah(totals.remaining)}\n` +
-      `Status: ${inv.status}`;
+    toast.loading('Menyiapkan PDF...', { id: 'share-pdf' });
+    const element = document.querySelector('.print-only') as HTMLElement;
+    if (!element) {
+      toast.dismiss('share-pdf');
+      return;
+    }
+    
+    const originalDisplay = element.style.display;
+    const originalPosition = element.style.position;
+    const originalLeft = element.style.left;
+    const originalTop = element.style.top;
+    
+    element.style.display = 'block';
+    element.style.position = 'absolute';
+    element.style.left = '-9999px';
+    element.style.top = '0';
+
+    const opt = {
+      margin:       0,
+      filename:     `Invoice-${inv.number}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
     try {
-      if (navigator.share) {
-        await navigator.share({ title: inv.number, text });
+      const pdfBlob = await html2pdf().set(opt).from(element.firstElementChild || element).outputPdf('blob');
+      
+      element.style.display = originalDisplay;
+      element.style.position = originalPosition;
+      element.style.left = originalLeft;
+      element.style.top = originalTop;
+
+      toast.dismiss('share-pdf');
+      const file = new File([pdfBlob], `Invoice-${inv.number}.pdf`, { type: 'application/pdf' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `Invoice ${inv.number}`,
+          files: [file]
+        });
       } else {
-        await navigator.clipboard.writeText(text);
-        toast.success('Ringkasan disalin');
+        const text =
+          `*Circle Phone* — Invoice ${inv.number}\n` +
+          `Customer: ${inv.customerName}\n` +
+          `Total: ${formatRupiah(totals.total)}\n` +
+          `DP/Tukar Tambah: ${formatRupiah(inv.payment.downPayment + inv.payment.tradeInValue)}\n` +
+          `Sisa: ${formatRupiah(totals.remaining)}\n` +
+          `Status: ${inv.status}`;
+        if (navigator.share) {
+          await navigator.share({ title: inv.number, text });
+        } else {
+          await navigator.clipboard.writeText(text);
+          toast.success('Ringkasan disalin (Share tidak didukung)');
+        }
       }
-    } catch {}
+    } catch (err) {
+      console.error(err);
+      element.style.display = originalDisplay;
+      element.style.position = originalPosition;
+      element.style.left = originalLeft;
+      element.style.top = originalTop;
+
+      toast.dismiss('share-pdf');
+      toast.error('Gagal membuat PDF');
+    }
   };
 
   const renderFormContent = () => (
